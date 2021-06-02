@@ -27,6 +27,7 @@ type Network struct {
 }
 
 func (n *Network) Create() error {
+
 	networkCFG := libvirtxml.Network{
 		Name: n.Name,
 	}
@@ -56,8 +57,6 @@ func (n *Network) Create() error {
 			for ip := n.Subnet.IP.Mask(n.Subnet.Mask); n.Subnet.Contains(ip); inc(ip) {
 				ips = append(ips, ip.String())
 			}
-			fmt.Println("first ip", ips[2])
-			fmt.Println("last ip", ips[len(ips)-1])
 			networkIPS[0].DHCP = &libvirtxml.NetworkDHCP{
 				Ranges: []libvirtxml.NetworkDHCPRange{{
 					Start: ips[2],
@@ -68,11 +67,18 @@ func (n *Network) Create() error {
 		networkCFG.IPs = networkIPS
 		n.networkCFG = networkCFG
 	}
-	_, err := n.networkCFG.Marshal()
+	networkXML, err := n.networkCFG.Marshal()
 	if err != nil {
 		return err
 	}
-	qemu.Connnect()
+	l, err := qemu.Connnect()
+	if err != nil {
+		return err
+	}
+	_, err = l.NetworkCreateXML(networkXML)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
