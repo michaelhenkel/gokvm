@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/michaelhenkel/gokvm/metadata"
 	"github.com/michaelhenkel/gokvm/qemu"
-	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+
+	log "github.com/sirupsen/logrus"
 	libvirt "libvirt.org/libvirt-go"
 	libvirtxml "libvirt.org/libvirt-go-xml"
 )
@@ -22,6 +23,21 @@ const (
 	NetworkMetadata string      = `<gokvm:net xmlns:gokvm="http://gokvm">gokvm</gokvm:net>`
 )
 
+func DefaultNetwork() Network {
+	cidr := "192.168.66.0/24"
+	gateway := net.ParseIP("192.168.66.1")
+	dnsserver := net.ParseIP("192.168.66.1")
+	_, subnet, _ := net.ParseCIDR(cidr)
+	return Network{
+		Name:      "gokvm",
+		Type:      BRIDGE,
+		Subnet:    subnet,
+		Gateway:   gateway,
+		DNSServer: dnsserver,
+		DHCP:      true,
+	}
+}
+
 type Network struct {
 	Name       string
 	Type       NetworkType
@@ -30,6 +46,7 @@ type Network struct {
 	DNSServer  net.IP
 	DHCP       bool
 	networkCFG libvirtxml.Network
+	Active     bool
 }
 
 func (n *Network) Delete() error {
@@ -66,52 +83,111 @@ func (n *Network) Delete() error {
 	return nil
 }
 
-func (n *Network) List() error {
+func (n *Network) Get() (*Network, error) {
+	networks, err := List()
+	if err != nil {
+		return nil, err
+	}
+	for _, netw := range networks {
+		if netw.Name == n.Name {
+			return netw, nil
+		}
+	}
+	return nil, nil
+}
+
+func List() ([]*Network, error) {
 	conn, err := qemu.Connnect()
 	if err != nil {
-		return err
+		return nil, err
+	}
+	networks := []*Network{}
+
+	activeNetworks, err := conn.ListAllNetworks(2)
+	if err != nil {
+		return nil, err
+	}
+	for _, anet := range activeNetworks {
+		if ok, err := checkMetadata(anet); err != nil {
+			return nil, err
+		} else if !ok {
+			continue
+		}
+		netw, err := lnetworkToNetwork(anet)
+		if err != nil {
+			return nil, err
+		}
+		networks = append(networks, netw)
+	}
+	inActiveNetworks, err := conn.ListAllNetworks(1)
+	if err != nil {
+		return nil, err
+	}
+	for _, anet := range inActiveNetworks {
+		if ok, err := checkMetadata(anet); err != nil {
+			return nil, err
+		} else if !ok {
+			continue
+		}
+		netw, err := lnetworkToNetwork(anet)
+		if err != nil {
+			return nil, err
+		}
+		networks = append(networks, netw)
 	}
 
+	return networks, nil
+}
+
+func lnetworkToNetwork(lnetwork libvirt.Network) (*Network, error) {
+	networkName, err := lnetwork.GetName()
+	if err != nil {
+		return nil, err
+	}
+	isActive, err := lnetwork.IsActive()
+	if err != nil {
+		return nil, err
+	}
+	networkXML, err := lnetwork.GetXMLDesc(0)
+	if err != nil {
+		return nil, err
+	}
+	var xmlNetwork libvirtxml.Network
+	if err := xmlNetwork.Unmarshal(networkXML); err != nil {
+		return nil, err
+	}
+	netw := &Network{
+		Name:   networkName,
+		Active: isActive,
+	}
+	for _, netwIP := range xmlNetwork.IPs {
+		addr := net.ParseIP(netwIP.Netmask).To4()
+		sz, _ := net.IPv4Mask(addr[0], addr[1], addr[2], addr[3]).Size()
+		ip, ipNet, err := net.ParseCIDR(fmt.Sprintf("%s/%d", netwIP.Address, sz))
+		if err != nil {
+			return nil, err
+		}
+		netw.Subnet = ipNet
+		netw.Gateway = ip
+		if netwIP.DHCP != nil {
+			netw.DHCP = true
+		}
+
+	}
+	return netw, nil
+}
+
+func Render(networks []*Network) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 	t.AppendHeader(table.Row{"Network", "Active"})
 	var tableRows []table.Row
-	activeNetworks, err := conn.ListAllNetworks(2)
-	if err != nil {
-		return err
-	}
-	for _, anet := range activeNetworks {
-		if ok, err := checkMetadata(anet); err != nil {
-			return err
-		} else if !ok {
-			continue
-		}
-		name, err := anet.GetName()
-		if err != nil {
-			return err
-		}
-		tableRows = append(tableRows, table.Row{name, "True"})
-	}
-	inActiveNetworks, err := conn.ListAllNetworks(1)
-	if err != nil {
-		return err
-	}
-	for _, anet := range inActiveNetworks {
-		if ok, err := checkMetadata(anet); err != nil {
-			return err
-		} else if !ok {
-			continue
-		}
-		name, err := anet.GetName()
-		if err != nil {
-			return err
-		}
-		tableRows = append(tableRows, table.Row{name, "False"})
+	for _, netw := range networks {
+		tableRows = append(tableRows, table.Row{netw.Name, netw.Active})
 	}
 	t.AppendRows(tableRows)
 	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
 	t.Render()
-	return nil
 }
 
 func checkMetadata(lnet libvirt.Network) (bool, error) {
@@ -123,14 +199,17 @@ func checkMetadata(lnet libvirt.Network) (bool, error) {
 	if err := xmlNetwork.Unmarshal(xmlDesc); err != nil {
 		return false, err
 	}
-
-	if xmlNetwork.Metadata == nil {
-		return false, nil
+	if xmlNetwork.Metadata != nil {
+		md, err := metadata.GetMetadata(xmlNetwork.Metadata.XML)
+		if err != nil {
+			return false, err
+		}
+		if md.Network != "gokvm" {
+			return false, nil
+		}
+		return true, nil
 	}
-	if strings.TrimSpace(xmlNetwork.Metadata.XML) != NetworkMetadata {
-		return false, nil
-	}
-	return true, nil
+	return false, nil
 }
 
 func (n *Network) Create() error {

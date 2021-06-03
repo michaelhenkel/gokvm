@@ -4,7 +4,9 @@ go 1.16
 
 require (
 	github.com/digitalocean/go-libvirt v0.0.0-20210524223541-696696fc24e0
+	github.com/google/uuid v1.2.0
 	github.com/jedib0t/go-pretty/v6 v6.2.2
+	github.com/kdomanski/iso9660 v0.2.0
 	github.com/machine-drivers/machine v0.16.2
 	github.com/sirupsen/logrus v1.2.0
 	github.com/spf13/cobra v1.1.3

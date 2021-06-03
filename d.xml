@@ -1,0 +1,16 @@
+<domain type='kvm' id='1'>
+  <name>MyGuest</name>
+  <uuid>4dea22b3-1d52-d8f3-2516-782e98ab3fa0</uuid>
+  <genid>43dc0cf8-809b-4adb-9bea-a9abb5f3d90e</genid>
+  <title>A short description - title - of the domain</title>
+  <description>Some human readable description</description>
+  <metadata>
+    <app1:foo xmlns:app1="http://app1.org/app1/">..</app1:foo>
+    <app2:bar xmlns:app2="http://app1.org/app2/">..</app2:bar>
+  </metadata>
+  <os>
+    <type arch='x86_64' machine='pc-q35-rhel8.2.0'>hvm</type>
+    <boot dev='hd'/>
+    <bootmenu enable='yes'/>
+  </os>
+</domain>

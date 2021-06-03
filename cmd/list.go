@@ -9,6 +9,7 @@ import (
 func init() {
 	listCmd.AddCommand(listNetworkCmd)
 	listCmd.AddCommand(listImageCmd)
+	listCmd.AddCommand(listClusterCmd)
 }
 
 var listCmd = &cobra.Command{

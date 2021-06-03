@@ -9,6 +9,7 @@ import (
 func init() {
 	deleteCmd.AddCommand(deleteNetworkCmd)
 	deleteCmd.AddCommand(deleteImageCmd)
+	deleteCmd.AddCommand(deleteClusterCmd)
 }
 
 var deleteCmd = &cobra.Command{

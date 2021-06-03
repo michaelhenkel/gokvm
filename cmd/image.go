@@ -9,10 +9,11 @@ import (
 )
 
 var (
-	url    string
-	md5url string
-	path   string
-	pool   string
+	url          string
+	md5url       string
+	path         string
+	pool         string
+	locationType string
 )
 
 func init() {
@@ -20,6 +21,7 @@ func init() {
 	createImageCmd.PersistentFlags().StringVarP(&url, "url", "u", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&md5url, "md5url", "m", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&path, "path", "p", "", "")
+	createImageCmd.PersistentFlags().StringVarP(&locationType, "locationtype", "l", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&pool, "pool", "s", "", "")
 }
 
@@ -74,22 +76,44 @@ func createImage() error {
 		url = "https://cloud-images.ubuntu.com/releases/focal/release-20210315/ubuntu-20.04-server-cloudimg-amd64.img"
 		url = "http://localhost:8000/ubuntu-20.04-server-cloudimg-amd64.img"
 	}
+	if locationType == "" {
+		locationType = string(image.URL)
+	}
 	i := image.Image{
-		Name: name,
-		Pool: pool,
-		Path: path,
-		URL:  url,
+		Name:              name,
+		Pool:              pool,
+		Path:              path,
+		ImageLocationType: image.ImageLocationType(locationType),
+		ImageLocation:     url,
 	}
-	if err := i.Create(); err != nil {
-		return err
-	}
-	return nil
+	return i.Create()
 }
 
 func listImage() error {
+	if pool == "" {
+		pool = "gokvm"
+	}
+	i := image.Image{
+		Pool: pool,
+	}
+	images, err := i.List()
+	if err != nil {
+		return err
+	}
+	image.Render(images)
 	return nil
 }
 
 func deleteImage() error {
-	return nil
+	if name == "" {
+		log.Fatal("Name is required")
+	}
+	if pool == "" {
+		pool = "gokvm"
+	}
+	i := image.Image{
+		Name: name,
+		Pool: pool,
+	}
+	return i.Delete()
 }

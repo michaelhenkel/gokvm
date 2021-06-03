@@ -125,12 +125,11 @@ var listNetworkCmd = &cobra.Command{
 }
 
 func listNetwork() error {
-	newNetwork := &network.Network{
-		Name: name,
-	}
-	if err := newNetwork.List(); err != nil {
+	networks, err := network.List()
+	if err != nil {
 		return err
 	}
+	network.Render(networks)
 	return nil
 }
 
