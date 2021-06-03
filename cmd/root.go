@@ -30,6 +30,8 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&name, "name", "n", "", "")
 
 	rootCmd.AddCommand(createCmd)
+	rootCmd.AddCommand(deleteCmd)
+	rootCmd.AddCommand(listCmd)
 }
 
 func initConfig() {

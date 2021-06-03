@@ -8,6 +8,7 @@ import (
 
 func init() {
 	createCmd.AddCommand(createNetworkCmd)
+	createCmd.AddCommand(createImageCmd)
 }
 
 var createCmd = &cobra.Command{

@@ -28,6 +28,10 @@ func init() {
 }
 
 func initNetworkConfig() {
+
+}
+
+func createNetwork() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
@@ -43,10 +47,6 @@ func initNetworkConfig() {
 	if err := checkNetworkType(networkType); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func createNetwork() error {
-
 	_, snipnet, err := net.ParseCIDR(subnet)
 	if err != nil {
 		return err
@@ -79,12 +79,6 @@ func createNetwork() error {
 	if err := newNetwork.Create(); err != nil {
 		return err
 	}
-	log.Info("Network: \n", newNetwork.Print())
-	networkXML, err := newNetwork.PrintXML()
-	if err != nil {
-		return err
-	}
-	log.Info("NetworkXML: \n", networkXML)
 	return nil
 }
 
@@ -108,12 +102,58 @@ var createNetworkCmd = &cobra.Command{
 	},
 }
 
+var deleteNetworkCmd = &cobra.Command{
+	Use:   "network",
+	Short: "deletes a network",
+	Long:  `All software has versions. This is Hugo's`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := deleteNetwork(); err != nil {
+			panic(err)
+		}
+	},
+}
+
+var listNetworkCmd = &cobra.Command{
+	Use:   "network",
+	Short: "lists networks",
+	Long:  `All software has versions. This is Hugo's`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if err := listNetwork(); err != nil {
+			panic(err)
+		}
+	},
+}
+
+func listNetwork() error {
+	newNetwork := &network.Network{
+		Name: name,
+	}
+	if err := newNetwork.List(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func checkSubnet(subnet string) error {
 	if subnet == "" {
 		return errors.New("subnet must be specified")
 	}
 	_, _, err := net.ParseCIDR(subnet)
 	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func deleteNetwork() error {
+	if name == "" {
+		log.Fatal("Name is required")
+	}
+	log.Info("Deleting network ", name)
+	newNetwork := &network.Network{
+		Name: name,
+	}
+	if err := newNetwork.Delete(); err != nil {
 		return err
 	}
 	return nil

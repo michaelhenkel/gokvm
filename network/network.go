@@ -3,17 +3,23 @@ package network
 import (
 	"fmt"
 	"net"
+	"os"
+	"strings"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/michaelhenkel/gokvm/qemu"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+	libvirt "libvirt.org/libvirt-go"
 	libvirtxml "libvirt.org/libvirt-go-xml"
 )
 
 type NetworkType string
 
 const (
-	BRIDGE NetworkType = "bridge"
-	OVS    NetworkType = "ovs"
+	BRIDGE          NetworkType = "bridge"
+	OVS             NetworkType = "ovs"
+	NetworkMetadata string      = `<gokvm:net xmlns:gokvm="http://gokvm">gokvm</gokvm:net>`
 )
 
 type Network struct {
@@ -26,10 +32,124 @@ type Network struct {
 	networkCFG libvirtxml.Network
 }
 
+func (n *Network) Delete() error {
+	l, err := qemu.Connnect()
+	if err != nil {
+		return err
+	}
+
+	networkCFG, err := l.LookupNetworkByName(n.Name)
+	if err != nil {
+		lerr, ok := err.(libvirt.Error)
+		if !ok {
+			return err
+		}
+		if lerr.Code == libvirt.ERR_NO_NETWORK {
+			log.Info("Network doesn't exist")
+			return nil
+		}
+		return err
+	}
+	isActive, err := networkCFG.IsActive()
+	if err != nil {
+		return err
+	}
+	if isActive {
+
+		if err := networkCFG.Destroy(); err != nil {
+			return err
+		}
+	}
+	if err := networkCFG.Undefine(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *Network) List() error {
+	conn, err := qemu.Connnect()
+	if err != nil {
+		return err
+	}
+
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Network", "Active"})
+	var tableRows []table.Row
+	activeNetworks, err := conn.ListAllNetworks(2)
+	if err != nil {
+		return err
+	}
+	for _, anet := range activeNetworks {
+		if ok, err := checkMetadata(anet); err != nil {
+			return err
+		} else if !ok {
+			continue
+		}
+		name, err := anet.GetName()
+		if err != nil {
+			return err
+		}
+		tableRows = append(tableRows, table.Row{name, "True"})
+	}
+	inActiveNetworks, err := conn.ListAllNetworks(1)
+	if err != nil {
+		return err
+	}
+	for _, anet := range inActiveNetworks {
+		if ok, err := checkMetadata(anet); err != nil {
+			return err
+		} else if !ok {
+			continue
+		}
+		name, err := anet.GetName()
+		if err != nil {
+			return err
+		}
+		tableRows = append(tableRows, table.Row{name, "False"})
+	}
+	t.AppendRows(tableRows)
+	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
+	t.Render()
+	return nil
+}
+
+func checkMetadata(lnet libvirt.Network) (bool, error) {
+	xmlDesc, err := lnet.GetXMLDesc(0)
+	if err != nil {
+		return false, err
+	}
+	var xmlNetwork libvirtxml.Network
+	if err := xmlNetwork.Unmarshal(xmlDesc); err != nil {
+		return false, err
+	}
+
+	if xmlNetwork.Metadata == nil {
+		return false, nil
+	}
+	if strings.TrimSpace(xmlNetwork.Metadata.XML) != NetworkMetadata {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (n *Network) Create() error {
+	conn, err := qemu.Connnect()
+	if err != nil {
+		return err
+	}
+
+	_, err = conn.LookupNetworkByName(n.Name)
+	if err == nil {
+		log.Info("Network already exists")
+		return nil
+	}
 
 	networkCFG := libvirtxml.Network{
 		Name: n.Name,
+		Metadata: &libvirtxml.NetworkMetadata{
+			XML: NetworkMetadata,
+		},
 	}
 	if n.Type == BRIDGE {
 		bridge := &libvirtxml.NetworkBridge{
@@ -67,16 +187,19 @@ func (n *Network) Create() error {
 		networkCFG.IPs = networkIPS
 		n.networkCFG = networkCFG
 	}
+
 	networkXML, err := n.networkCFG.Marshal()
 	if err != nil {
 		return err
 	}
-	l, err := qemu.Connnect()
+	libvirtNet, err := conn.NetworkDefineXML(networkXML)
 	if err != nil {
 		return err
 	}
-	_, err = l.NetworkCreateXML(networkXML)
-	if err != nil {
+	if err := libvirtNet.Create(); err != nil {
+		return err
+	}
+	if err := libvirtNet.SetAutostart(true); err != nil {
 		return err
 	}
 
