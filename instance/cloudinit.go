@@ -2,11 +2,14 @@ package instance
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"github.com/kdomanski/iso9660"
 	"github.com/michaelhenkel/gokvm/image"
 	"gopkg.in/yaml.v3"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func (i *Instance) createCloudInit() error {
@@ -28,12 +31,12 @@ func (i *Instance) createCloudInit() error {
 		DisableRoot: false,
 		Chpasswd: chpasswd{
 			List: `gokvm:gokvm
-			root:gokvm`,
+root:gokvm`,
 			Expire: false,
 		},
 		WriteFiles: []writeFiles{{
 			Content: `[Resolve]
-			DNS=` + i.Network.DNSServer.String(),
+DNS=` + i.Network.DNSServer.String(),
 			Path: "/etc/systemd/resolved.conf",
 		}},
 		RunCMD: []string{
@@ -49,13 +52,19 @@ func (i *Instance) createCloudInit() error {
 }
 
 func (i *Instance) createISO(ci cloudInit) error {
-
-	out := os.TempDir()
+	log.Info("Creating ISO")
+	out, err := ioutil.TempDir("/tmp", "prefix")
+	if err != nil {
+		return err
+	}
 	defer os.RemoveAll(out)
 
 	cloudInitPath := out + "/config"
 	metaDataPath := cloudInitPath + "/meta-data"
 	userDataPath := cloudInitPath + "/user-data"
+	if err := os.Mkdir(cloudInitPath, 0755); err != nil {
+		return err
+	}
 
 	ciByte, err := yaml.Marshal(&ci)
 	if err != nil {
@@ -127,11 +136,15 @@ func (i *Instance) createISO(ci cloudInit) error {
 	}
 
 	img := image.Image{
-		Name: fmt.Sprintf("cloud-init-%s.%s.%s", i.Name, i.ClusterName, i.Suffix),
+		Pool:              "gokvm",
+		Name:              fmt.Sprintf("cloud-init-%s.%s.%s", i.Name, i.ClusterName, i.Suffix),
+		ImageLocationType: image.File,
+		ImageLocation:     out + "/cidata.iso",
 	}
 	if err := img.Create(); err != nil {
 		return err
 	}
+	log.Info("Created ISO")
 
 	return nil
 }

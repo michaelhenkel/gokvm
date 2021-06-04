@@ -63,7 +63,7 @@ func (c *Cluster) Create() error {
 	} else {
 		c.Image = *imageExists
 	}
-	log.Info("creating instance")
+
 	for i := 0; i < c.Controller; i++ {
 		inst := instance.Instance{
 			Name:        fmt.Sprintf("%s_%d", c.Name, i),

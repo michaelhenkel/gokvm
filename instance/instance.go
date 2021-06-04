@@ -24,7 +24,9 @@ type Instance struct {
 }
 
 func (i *Instance) Create() error {
-	i.createCloudInit()
+	if err := i.createCloudInit(); err != nil {
+		return err
+	}
 	return nil
 }
 

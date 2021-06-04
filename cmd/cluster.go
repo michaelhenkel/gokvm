@@ -23,7 +23,7 @@ func init() {
 	cobra.OnInitialize(initImageConfig)
 	createClusterCmd.PersistentFlags().StringVarP(&img, "image", "i", "default", "")
 	createClusterCmd.PersistentFlags().StringVarP(&nw, "network", "l", "gokvm", "")
-	createClusterCmd.PersistentFlags().StringVarP(&suffix, "suffix", "s", ".local", "")
+	createClusterCmd.PersistentFlags().StringVarP(&suffix, "suffix", "s", "local", "")
 	createClusterCmd.PersistentFlags().IntVarP(&worker, "worker", "w", 0, "")
 	createClusterCmd.PersistentFlags().IntVarP(&controller, "controller", "c", 1, "")
 	createClusterCmd.PersistentFlags().StringVarP(&pubKey, "publickey", "k", "~/.ssh/id_rsa.pub", "")

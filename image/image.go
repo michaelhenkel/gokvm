@@ -183,7 +183,6 @@ func (i *Image) createVolume(pool *libvirt.StoragePool, l *libvirt.Connect) erro
 	if err != nil {
 		return err
 	}
-
 	defer os.RemoveAll(dir)
 
 	filename := fmt.Sprintf("%s/%s", dir, i.Name)

@@ -172,8 +172,13 @@ func lnetworkToNetwork(lnetwork libvirt.Network) (*Network, error) {
 		if netwIP.DHCP != nil {
 			netw.DHCP = true
 		}
-
 	}
+	if xmlNetwork.DNS != nil {
+		for _, fw := range xmlNetwork.DNS.Forwarders {
+			netw.DNSServer = net.ParseIP(fw.Addr)
+		}
+	}
+
 	return netw, nil
 }
 
@@ -229,6 +234,16 @@ func (n *Network) Create() error {
 		Metadata: &libvirtxml.NetworkMetadata{
 			XML: NetworkMetadata,
 		},
+	}
+	if n.DNSServer != nil {
+		dns := &libvirtxml.NetworkDNS{
+			//Enable: "no",
+			Forwarders: []libvirtxml.NetworkDNSForwarder{{
+				Addr: n.DNSServer.String(),
+			}},
+		}
+		networkCFG.DNS = dns
+		log.Info(dns)
 	}
 	if n.Type == BRIDGE {
 		bridge := &libvirtxml.NetworkBridge{
