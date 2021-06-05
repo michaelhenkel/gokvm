@@ -7,7 +7,6 @@ import (
 	"os/exec"
 
 	"github.com/michaelhenkel/gokvm/image"
-	log "github.com/sirupsen/logrus"
 	//qcow2 "github.com/zchee/go-qcow2"
 )
 
@@ -42,11 +41,11 @@ func (i *Instance) createInstanceImage() (*image.Image, error) {
 		}
 	*/
 	cmd := exec.Command("qemu-img", "create", "-b", i.Image.Path, "-f", "qcow2", "-F", "qcow2", fmt.Sprintf("%s/%s", out, i.Name), i.Resources.Disk)
-	stdout, err := cmd.Output()
+	_, err = cmd.Output()
 	if err != nil {
 		return nil, err
 	}
-	log.Info(string(stdout))
+	//log.Info(string(stdout))
 	//qemu-img create -b ${imageName} -f qcow2 -F qcow2 ${libvirtImageLocation}/${imageName}-${clusterName}-${hostname}.qcow2 ${disk}
 	img := &image.Image{
 		Pool:              i.Image.Pool,

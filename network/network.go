@@ -10,7 +10,6 @@ import (
 	"github.com/michaelhenkel/gokvm/qemu"
 	"gopkg.in/yaml.v3"
 
-	log "github.com/sirupsen/logrus"
 	libvirt "libvirt.org/libvirt-go"
 	libvirtxml "libvirt.org/libvirt-go-xml"
 )
@@ -63,7 +62,6 @@ func (n *Network) Delete() error {
 			return err
 		}
 		if lerr.Code == libvirt.ERR_NO_NETWORK {
-			log.Info("Network doesn't exist")
 			return nil
 		}
 		return err
@@ -195,7 +193,7 @@ func Render(networks []*Network) {
 		tableRows = append(tableRows, table.Row{netw.Name, netw.Active})
 	}
 	t.AppendRows(tableRows)
-	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
+	t.SetStyle(table.StyleLight)
 	t.Render()
 }
 
@@ -232,7 +230,6 @@ func (n *Network) Create() error {
 
 	_, err = conn.LookupNetworkByName(n.Name)
 	if err == nil {
-		log.Info("Network already exists")
 		return nil
 	}
 
@@ -245,15 +242,6 @@ func (n *Network) Create() error {
 		Metadata: &libvirtxml.NetworkMetadata{
 			XML: mdXML,
 		},
-	}
-	if n.DNSServer != nil {
-		dns := &libvirtxml.NetworkDNS{
-			//Enable: "no",
-			Forwarders: []libvirtxml.NetworkDNSForwarder{{
-				Addr: n.DNSServer.String(),
-			}},
-		}
-		networkCFG.DNS = dns
 	}
 	if n.Type == BRIDGE {
 		bridge := &libvirtxml.NetworkBridge{

@@ -71,7 +71,6 @@ func List(poolName string) ([]*Image, error) {
 			return nil, err
 		}
 		if lerr.Code == libvirt.ERR_NO_STORAGE_POOL {
-			log.Info("Pool doesn't exist")
 			return nil, nil
 		}
 		return nil, err
@@ -117,7 +116,7 @@ func Render(images []*Image) {
 		tableRows = append(tableRows, table.Row{img.Pool, img.Name})
 	}
 	t.AppendRows(tableRows)
-	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
+	t.SetStyle(table.StyleLight)
 	t.Render()
 }
 
@@ -288,7 +287,6 @@ func (i *Image) createPool() error {
 	}
 	_, err = l.LookupStoragePoolByName(i.Pool)
 	if err == nil {
-		log.Info("Pool already exists")
 		return nil
 	}
 	if _, err := os.Stat(fmt.Sprintf("%s/%s", i.Path, i.Pool)); os.IsNotExist(err) {

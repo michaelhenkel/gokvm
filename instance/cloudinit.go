@@ -8,8 +8,6 @@ import (
 	"github.com/kdomanski/iso9660"
 	"github.com/michaelhenkel/gokvm/image"
 	"gopkg.in/yaml.v3"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func (i *Instance) createCloudInit() (*image.Image, error) {
@@ -44,7 +42,6 @@ DNS=` + i.Network.DNSServer.String(),
 			"cat /etc/systemd/resolved.conf > /run/test",
 		},
 	}
-	log.Info("Creating ISO")
 	out, err := ioutil.TempDir("/tmp", "prefix")
 	if err != nil {
 		return nil, err

@@ -1,6 +1,9 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"code.cloudfoundry.org/bytefmt"
 	"github.com/michaelhenkel/gokvm/cluster"
 	"github.com/michaelhenkel/gokvm/image"
@@ -17,7 +20,7 @@ var (
 	suffix     string
 	worker     int
 	controller int
-	pubKey     string
+	pubKeyPath string
 	cpu        int
 	memory     string
 	disk       string
@@ -33,7 +36,7 @@ func init() {
 	createClusterCmd.PersistentFlags().StringVarP(&memory, "memory", "m", "12G", "")
 	createClusterCmd.PersistentFlags().IntVarP(&cpu, "cpu", "v", 4, "")
 	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "10G", "")
-	createClusterCmd.PersistentFlags().StringVarP(&pubKey, "publickey", "k", "~/.ssh/id_rsa.pub", "")
+	createClusterCmd.PersistentFlags().StringVarP(&pubKeyPath, "publickey", "k", "", "")
 
 }
 
@@ -78,6 +81,18 @@ func createCluster() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
+	if pubKeyPath == "" {
+		dirname, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		pubKeyPath = fmt.Sprintf("%s/.ssh/id_rsa.pub", dirname)
+	}
+	f, err := os.ReadFile(pubKeyPath)
+	if err != nil {
+		return err
+	}
+
 	memBytes, err := bytefmt.ToBytes(memory)
 	if err != nil {
 		return err
@@ -94,7 +109,7 @@ func createCluster() error {
 		Suffix:     suffix,
 		Worker:     worker,
 		Controller: controller,
-		PublicKey:  pubKey,
+		PublicKey:  string(f),
 		Resources: instance.Resources{
 			Memory: memBytes,
 			CPU:    cpu,

@@ -7,7 +7,7 @@ import (
 	"github.com/michaelhenkel/gokvm/metadata"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/michaelhenkel/gokvm/qemu"
-	log "github.com/sirupsen/logrus"
+
 	"libvirt.org/libvirt-go"
 
 	libvirtxml "libvirt.org/libvirt-go-xml"
@@ -22,6 +22,7 @@ type Instance struct {
 	Network     network.Network
 	ClusterName string
 	Suffix      string
+	IPAddresses []string
 }
 
 type Resources struct {
@@ -114,7 +115,6 @@ func (i *Instance) Create() error {
 		Cluster: &i.ClusterName,
 	}
 	domainMetadata := m.InstanceMetadata()
-	log.Info("domain meta", domainMetadata)
 
 	defaultDomain, err := defaultDomain()
 	if err != nil {
@@ -147,7 +147,6 @@ func (i *Instance) Create() error {
 		Check: "full",
 	}
 	defaultDomain.Devices.Emulator = "/usr/local/bin/qemu-system-x86_64"
-	log.Info("CLOUDIMGPATH ", cloudInitImg.Path)
 	cdrom := libvirtxml.DomainDisk{
 		Device: "cdrom",
 		Driver: &libvirtxml.DomainDiskDriver{
@@ -265,12 +264,14 @@ func (i *Instance) Create() error {
 			return err
 		}
 	*/
-	log.Info("###################DOMAIN#####################")
-	log.Info(domainXML)
-	log.Info("###################DOMAIN#####################")
-
-	_, err = l.DomainDefineXML(domainXML)
+	ldom, err := l.DomainDefineXML(domainXML)
 	if err != nil {
+		return err
+	}
+	if err := ldom.SetAutostart(true); err != nil {
+		return err
+	}
+	if err := ldom.Create(); err != nil {
 		return err
 	}
 
@@ -323,10 +324,21 @@ func domainToInstance(domain libvirt.Domain, cluster string) (*Instance, error) 
 	if err != nil {
 		return nil, err
 	}
+	intfList, err := domain.ListAllInterfaceAddresses(0)
+	if err != nil {
+		return nil, err
+	}
+	var ipaddresses []string
+	for _, intf := range intfList {
+		for _, addr := range intf.Addrs {
+			ipaddresses = append(ipaddresses, addr.Addr)
+		}
+	}
 
 	return &Instance{
 		Name:        instName,
 		ClusterName: cluster,
+		IPAddresses: ipaddresses,
 	}, nil
 }
 

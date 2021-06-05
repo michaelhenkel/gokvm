@@ -148,7 +148,6 @@ func deleteNetwork() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
-	log.Info("Deleting network ", name)
 	newNetwork := &network.Network{
 		Name: name,
 	}

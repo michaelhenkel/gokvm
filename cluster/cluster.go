@@ -48,17 +48,19 @@ func Render(clusters []*Cluster) {
 	rowConfigAutoMerge := table.RowConfig{AutoMerge: true}
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Cluster", "Instances"})
+	t.AppendHeader(table.Row{"Cluster", "Instances", "IP"})
 	for _, cluster := range clusters {
 		for _, inst := range cluster.Instances {
-			t.AppendRow(table.Row{cluster.Name, inst.Name}, rowConfigAutoMerge)
+			for _, addr := range inst.IPAddresses {
+				t.AppendRow(table.Row{cluster.Name, inst.Name, addr}, rowConfigAutoMerge)
+			}
 		}
 
 	}
 	t.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true},
 	})
-	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
+	t.SetStyle(table.StyleLight)
 	t.Render()
 }
 
