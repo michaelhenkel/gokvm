@@ -128,7 +128,7 @@ DNS=` + i.Network.DNSServer.String(),
 	}
 
 	img := &image.Image{
-		Pool:              "gokvm",
+		Pool:              i.Image.Pool,
 		Name:              fmt.Sprintf("%s-cloudinit", i.Name),
 		ImageLocationType: image.File,
 		ImageLocation:     out + "/cidata.iso",
@@ -136,9 +136,13 @@ DNS=` + i.Network.DNSServer.String(),
 	if err := img.Create(); err != nil {
 		return nil, err
 	}
-	log.Info("Created ISO")
 
-	return img, nil
+	newImg, err := image.Get(img.Name, img.Pool)
+	if err != nil {
+		return nil, err
+	}
+
+	return newImg, nil
 }
 
 type cloudInit struct {

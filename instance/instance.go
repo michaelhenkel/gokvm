@@ -146,7 +146,8 @@ func (i *Instance) Create() error {
 		Match: "exact",
 		Check: "full",
 	}
-
+	defaultDomain.Devices.Emulator = "/usr/local/bin/qemu-system-x86_64"
+	log.Info("CLOUDIMGPATH ", cloudInitImg.Path)
 	cdrom := libvirtxml.DomainDisk{
 		Device: "cdrom",
 		Driver: &libvirtxml.DomainDiskDriver{
@@ -157,6 +158,7 @@ func (i *Instance) Create() error {
 			File: &libvirtxml.DomainDiskSourceFile{
 				File: cloudInitImg.Path,
 			},
+			Index: 2,
 		},
 		Target: &libvirtxml.DomainDiskTarget{
 			Dev: "sda",
@@ -175,7 +177,6 @@ func (i *Instance) Create() error {
 			},
 		},
 	}
-	defaultDomain.Devices.Emulator = "/usr/local/bin/qemu-system-x86_64"
 	defaultDomain.Devices.Disks = append(defaultDomain.Devices.Disks, cdrom)
 	disk := libvirtxml.DomainDisk{
 		Device: "disk",
@@ -248,26 +249,26 @@ func (i *Instance) Create() error {
 		return err
 	}
 	/*
-			var testDomain libvirtxml.Domain
-			if err := testDomain.Unmarshal(dm); err != nil {
-				return err
-			}
-			testDomXML, err := testDomain.Marshal()
-			if err != nil {
-				return err
-			}
-			log.Info("###################TEST#####################")
-			log.Info(testDomXML)
-			log.Info("###################TEST#####################")
-			_, err = l.DomainDefineXML(testDomXML)
-			if err != nil {
-				return err
-			}
-
-		log.Info("###################DOMAIN#####################")
-		log.Info(domainXML)
-		log.Info("###################DOMAIN#####################")
+		var testDomain libvirtxml.Domain
+		if err := testDomain.Unmarshal(dm); err != nil {
+			return err
+		}
+		testDomXML, err := testDomain.Marshal()
+		if err != nil {
+			return err
+		}
+		log.Info("###################TEST#####################")
+		log.Info(testDomXML)
+		log.Info("###################TEST#####################")
+		_, err = l.DomainDefineXML(testDomXML)
+		if err != nil {
+			return err
+		}
 	*/
+	log.Info("###################DOMAIN#####################")
+	log.Info(domainXML)
+	log.Info("###################DOMAIN#####################")
+
 	_, err = l.DomainDefineXML(domainXML)
 	if err != nil {
 		return err
@@ -645,6 +646,22 @@ var domainModel string = `<domain type='kvm' id='1'>
 	<alias name='pci.6'/>
 	<address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x5'/>
   </controller>
+  <serial type='pty'>
+  <target type='isa-serial' port='0'>
+	<model name='isa-serial'/>
+  </target>
+  <alias name='serial0'/>
+</serial>
+<console type='pty'>
+  <source path='/dev/pts/1'/>
+  <target type='serial' port='0'/>
+  <alias name='serial0'/>
+</console>
+<channel type='unix'>
+  <target type='virtio' name='org.qemu.guest_agent.0' state='disconnected'/>
+  <alias name='channel0'/>
+  <address type='virtio-serial' controller='0' bus='0' port='1'/>
+</channel>
   <input type='tablet' bus='usb'>
 	<alias name='input0'/>
 	<address type='usb' bus='0' port='1'/>
@@ -655,9 +672,9 @@ var domainModel string = `<domain type='kvm' id='1'>
   <input type='keyboard' bus='ps2'>
 	<alias name='input2'/>
   </input>
-  <graphics type='vnc' autoport='yes' listen='127.0.0.1'>
-	<listen type='address' address='127.0.0.1'/>
-  </graphics>
+  <graphics type='vnc' port='-1' autoport='yes'>
+  <listen type='address'/>
+</graphics>
   <video>
 	<model type='qxl' ram='65536' vram='65536' vgamem='16384' heads='1' primary='yes'/>
 	<alias name='video0'/>

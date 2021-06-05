@@ -117,7 +117,21 @@ func (c *Cluster) Create() error {
 
 	for i := 0; i < c.Controller; i++ {
 		inst := instance.Instance{
-			Name:        fmt.Sprintf("instance-%d.%s.%s", i, c.Name, c.Suffix),
+			Name:        fmt.Sprintf("c-instance-%d.%s.%s", i, c.Name, c.Suffix),
+			PubKey:      c.PublicKey,
+			Network:     c.Network,
+			Image:       c.Image,
+			ClusterName: c.Name,
+			Suffix:      c.Suffix,
+			Resources:   c.Resources,
+		}
+		if err := inst.Create(); err != nil {
+			return err
+		}
+	}
+	for i := 0; i < c.Worker; i++ {
+		inst := instance.Instance{
+			Name:        fmt.Sprintf("w-instance-%d.%s.%s", i, c.Name, c.Suffix),
 			PubKey:      c.PublicKey,
 			Network:     c.Network,
 			Image:       c.Image,
