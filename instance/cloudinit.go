@@ -12,9 +12,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (i *Instance) createCloudInit() error {
+func (i *Instance) createCloudInit() (*image.Image, error) {
 	ci := cloudInit{
-		Hostname:       fmt.Sprintf("%s.%s.%s", i.Name, i.ClusterName, i.Suffix),
+		Hostname:       i.Name,
 		ManageEtcHosts: true,
 		Users: []user{{
 			Name:              "gokvm",
@@ -44,18 +44,10 @@ DNS=` + i.Network.DNSServer.String(),
 			"cat /etc/systemd/resolved.conf > /run/test",
 		},
 	}
-	if err := i.createISO(ci); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (i *Instance) createISO(ci cloudInit) error {
 	log.Info("Creating ISO")
 	out, err := ioutil.TempDir("/tmp", "prefix")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer os.RemoveAll(out)
 
@@ -63,19 +55,19 @@ func (i *Instance) createISO(ci cloudInit) error {
 	metaDataPath := cloudInitPath + "/meta-data"
 	userDataPath := cloudInitPath + "/user-data"
 	if err := os.Mkdir(cloudInitPath, 0755); err != nil {
-		return err
+		return nil, err
 	}
 
 	ciByte, err := yaml.Marshal(&ci)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	userDataHeader := fmt.Sprintf("#cloud-config\n%s", string(ciByte))
 	userDataOut := []byte(userDataHeader)
 
 	if err := os.WriteFile(userDataPath, userDataOut, 0600); err != nil {
-		return err
+		return nil, err
 	}
 
 	defaultMetaData := &metaData{
@@ -85,68 +77,68 @@ func (i *Instance) createISO(ci cloudInit) error {
 
 	metaDataYAML, err := yaml.Marshal(defaultMetaData)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if err := os.WriteFile(metaDataPath, metaDataYAML, 0600); err != nil {
-		return err
+		return nil, err
 	}
 
 	writer, err := iso9660.NewWriter()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer writer.Cleanup()
 
 	userData, err := os.Open(out + "/config/user-data")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer userData.Close()
 
 	err = writer.AddFile(userData, "user-data")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	metaData, err := os.Open(out + "/config/meta-data")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer metaData.Close()
 
 	err = writer.AddFile(metaData, "meta-data")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	outputFile, err := os.OpenFile(out+"/cidata.iso", os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0600)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = writer.WriteTo(outputFile, "CIDATA")
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = outputFile.Close()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	img := image.Image{
+	img := &image.Image{
 		Pool:              "gokvm",
-		Name:              fmt.Sprintf("cloud-init-%s.%s.%s", i.Name, i.ClusterName, i.Suffix),
+		Name:              fmt.Sprintf("%s-cloudinit", i.Name),
 		ImageLocationType: image.File,
 		ImageLocation:     out + "/cidata.iso",
 	}
 	if err := img.Create(); err != nil {
-		return err
+		return nil, err
 	}
 	log.Info("Created ISO")
 
-	return nil
+	return img, nil
 }
 
 type cloudInit struct {

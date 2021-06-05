@@ -47,6 +47,7 @@ type Network struct {
 	DHCP       bool
 	networkCFG libvirtxml.Network
 	Active     bool
+	Bridge     string
 }
 
 func (n *Network) Delete() error {
@@ -83,13 +84,13 @@ func (n *Network) Delete() error {
 	return nil
 }
 
-func (n *Network) Get() (*Network, error) {
+func Get(networkName string) (*Network, error) {
 	networks, err := List()
 	if err != nil {
 		return nil, err
 	}
 	for _, netw := range networks {
-		if netw.Name == n.Name {
+		if netw.Name == networkName {
 			return netw, nil
 		}
 	}
@@ -178,6 +179,9 @@ func lnetworkToNetwork(lnetwork libvirt.Network) (*Network, error) {
 			netw.DNSServer = net.ParseIP(fw.Addr)
 		}
 	}
+	if xmlNetwork.Bridge != nil {
+		netw.Bridge = xmlNetwork.Bridge.Name
+	}
 
 	return netw, nil
 }
@@ -209,7 +213,10 @@ func checkMetadata(lnet libvirt.Network) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		if md.Network != "gokvm" {
+		if md.Net == nil {
+			return false, nil
+		}
+		if *md.Net != "gokvm" {
 			return false, nil
 		}
 		return true, nil
@@ -229,10 +236,14 @@ func (n *Network) Create() error {
 		return nil
 	}
 
+	md := metadata.Metadata{
+		Net: &n.Name,
+	}
+	mdXML := md.InstanceMetadata()
 	networkCFG := libvirtxml.Network{
 		Name: n.Name,
 		Metadata: &libvirtxml.NetworkMetadata{
-			XML: NetworkMetadata,
+			XML: mdXML,
 		},
 	}
 	if n.DNSServer != nil {
@@ -243,7 +254,6 @@ func (n *Network) Create() error {
 			}},
 		}
 		networkCFG.DNS = dns
-		log.Info(dns)
 	}
 	if n.Type == BRIDGE {
 		bridge := &libvirtxml.NetworkBridge{

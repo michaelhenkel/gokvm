@@ -93,10 +93,7 @@ func listImage() error {
 	if pool == "" {
 		pool = "gokvm"
 	}
-	i := image.Image{
-		Pool: pool,
-	}
-	images, err := i.List()
+	images, err := image.List(pool)
 	if err != nil {
 		return err
 	}

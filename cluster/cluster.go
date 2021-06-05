@@ -2,7 +2,9 @@ package cluster
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/network"
@@ -18,10 +20,57 @@ type Cluster struct {
 	Worker     int
 	Controller int
 	PublicKey  string
+	Resources  instance.Resources
+	Instances  []*instance.Instance
+}
+
+func List() ([]*Cluster, error) {
+	instances, err := instance.List("")
+	if err != nil {
+		return nil, err
+	}
+	var clusterMap = make(map[string][]*instance.Instance)
+	for _, inst := range instances {
+		clusterMap[inst.ClusterName] = append(clusterMap[inst.ClusterName], inst)
+	}
+	var clusterList []*Cluster
+	for k, v := range clusterMap {
+		cl := &Cluster{
+			Name:      k,
+			Instances: v,
+		}
+		clusterList = append(clusterList, cl)
+	}
+	return clusterList, nil
+}
+
+func Render(clusters []*Cluster) {
+	rowConfigAutoMerge := table.RowConfig{AutoMerge: true}
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Cluster", "Instances"})
+	for _, cluster := range clusters {
+		for _, inst := range cluster.Instances {
+			t.AppendRow(table.Row{cluster.Name, inst.Name}, rowConfigAutoMerge)
+		}
+
+	}
+	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
+	t.Render()
 }
 
 func (c *Cluster) Delete() error {
-
+	log.Info("Delete Cluster ", c.Name)
+	instances, err := instance.List(c.Name)
+	if err != nil {
+		return err
+	}
+	for _, inst := range instances {
+		log.Info("delete inst ", inst)
+		if err := inst.Delete(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -34,22 +83,8 @@ func (c *Cluster) Create() error {
 		log.Info("Cluster already exists")
 		return nil
 	}
-	networkExists, err := c.Network.Get()
-	if err != nil {
-		return err
-	}
-	if networkExists == nil {
-		defaultNetwork := network.DefaultNetwork()
-		defaultNetwork.Name = c.Network.Name
-		if err := defaultNetwork.Create(); err != nil {
-			return err
-		}
-		c.Network = defaultNetwork
-	} else {
-		c.Network = *networkExists
-	}
 
-	imageExists, err := c.Image.Get()
+	imageExists, err := image.Get(c.Image.Name, c.Image.Pool)
 	if err != nil {
 		return err
 	}
@@ -64,14 +99,30 @@ func (c *Cluster) Create() error {
 		c.Image = *imageExists
 	}
 
+	networkExists, err := network.Get(c.Network.Name)
+	if err != nil {
+		return err
+	}
+	if networkExists == nil {
+		defaultNetwork := network.DefaultNetwork()
+		defaultNetwork.Name = c.Network.Name
+		if err := defaultNetwork.Create(); err != nil {
+			return err
+		}
+		c.Network = defaultNetwork
+	} else {
+		c.Network = *networkExists
+	}
+
 	for i := 0; i < c.Controller; i++ {
 		inst := instance.Instance{
-			Name:        fmt.Sprintf("%s_%d", c.Name, i),
+			Name:        fmt.Sprintf("instance-%d.%s.%s", i, c.Name, c.Suffix),
 			PubKey:      c.PublicKey,
 			Network:     c.Network,
 			Image:       c.Image,
 			ClusterName: c.Name,
 			Suffix:      c.Suffix,
+			Resources:   c.Resources,
 		}
 		if err := inst.Create(); err != nil {
 			return err

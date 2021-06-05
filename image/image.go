@@ -43,29 +43,37 @@ func DefaultImage() Image {
 	}
 }
 
-func (i *Image) Get() (*Image, error) {
-	images, err := i.List()
+func Get(name string, poolName string) (*Image, error) {
+	images, err := List(poolName)
 	if err != nil {
 		return nil, err
 	}
 	for _, img := range images {
-		if img.Name == i.Name {
+		if img.Name == name {
 			return img, nil
 		}
 	}
 	return nil, nil
 }
 
-func (i *Image) List() ([]*Image, error) {
+func List(poolName string) ([]*Image, error) {
 	l, err := qemu.Connnect()
 	if err != nil {
 		return nil, err
 	}
-	if i.Pool == "" {
-		i.Pool = "gokvm"
+	if poolName == "" {
+		poolName = "gokvm"
 	}
-	pool, err := l.LookupStoragePoolByName(i.Pool)
+	pool, err := l.LookupStoragePoolByName(poolName)
 	if err != nil {
+		lerr, ok := err.(libvirt.Error)
+		if !ok {
+			return nil, err
+		}
+		if lerr.Code == libvirt.ERR_NO_STORAGE_POOL {
+			log.Info("Pool doesn't exist")
+			return nil, nil
+		}
 		return nil, err
 	}
 	vols, err := pool.ListAllStorageVolumes(0)
@@ -74,7 +82,7 @@ func (i *Image) List() ([]*Image, error) {
 	}
 	var images []*Image
 	for _, vol := range vols {
-		img, err := volumeToImage(vol, i.Pool)
+		img, err := volumeToImage(vol, poolName)
 		if err != nil {
 			return nil, err
 		}
@@ -192,8 +200,10 @@ func (i *Image) createVolume(pool *libvirt.StoragePool, l *libvirt.Connect) erro
 	}
 	defer out.Close()
 
+	log.Infof("Downloading image from %s\n", i.ImageLocation)
 	switch i.ImageLocationType {
 	case URL:
+
 		resp, err := http.Get(i.ImageLocation)
 		if err != nil {
 			return err
