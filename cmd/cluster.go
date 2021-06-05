@@ -32,7 +32,7 @@ func init() {
 	createClusterCmd.PersistentFlags().IntVarP(&controller, "controller", "c", 1, "")
 	createClusterCmd.PersistentFlags().StringVarP(&memory, "memory", "m", "12G", "")
 	createClusterCmd.PersistentFlags().IntVarP(&cpu, "cpu", "v", 4, "")
-	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "30G", "")
+	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "10G", "")
 	createClusterCmd.PersistentFlags().StringVarP(&pubKey, "publickey", "k", "~/.ssh/id_rsa.pub", "")
 
 }
@@ -82,10 +82,7 @@ func createCluster() error {
 	if err != nil {
 		return err
 	}
-	diskBytes, err := bytefmt.ToBytes(disk)
-	if err != nil {
-		return err
-	}
+
 	cl := cluster.Cluster{
 		Name: name,
 		Network: network.Network{
@@ -101,7 +98,7 @@ func createCluster() error {
 		Resources: instance.Resources{
 			Memory: memBytes,
 			CPU:    cpu,
-			Disk:   diskBytes,
+			Disk:   disk,
 		},
 	}
 	return cl.Create()

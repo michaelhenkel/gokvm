@@ -55,18 +55,19 @@ func Render(clusters []*Cluster) {
 		}
 
 	}
+	t.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true},
+	})
 	t.SetStyle(table.StyleColoredBlackOnBlueWhite)
 	t.Render()
 }
 
 func (c *Cluster) Delete() error {
-	log.Info("Delete Cluster ", c.Name)
 	instances, err := instance.List(c.Name)
 	if err != nil {
 		return err
 	}
 	for _, inst := range instances {
-		log.Info("delete inst ", inst)
 		if err := inst.Delete(); err != nil {
 			return err
 		}

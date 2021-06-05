@@ -27,7 +27,7 @@ type Instance struct {
 type Resources struct {
 	CPU    int
 	Memory uint64
-	Disk   uint64
+	Disk   string
 }
 
 func getUintPtr(in uint) *uint {
