@@ -86,20 +86,16 @@ func (c *Cluster) Create() error {
 		log.Info("Cluster already exists")
 		return nil
 	}
-
-	imageExists, err := image.Get(c.Image.Name, c.Image.Pool)
+	found, err := c.Image.Get()
 	if err != nil {
 		return err
 	}
-	if imageExists == nil {
+	if !found {
 		defaultImage := image.DefaultImage()
-		defaultImage.Name = c.Image.Name
 		if err := defaultImage.Create(); err != nil {
 			return err
 		}
 		c.Image = defaultImage
-	} else {
-		c.Image = *imageExists
 	}
 
 	networkExists, err := network.Get(c.Network.Name)
@@ -118,6 +114,7 @@ func (c *Cluster) Create() error {
 	}
 
 	for i := 0; i < c.Controller; i++ {
+		log.Infof("CLUSTER %+v\n", c.Image)
 		inst := instance.Instance{
 			Name:        fmt.Sprintf("c-instance-%d.%s.%s", i, c.Name, c.Suffix),
 			PubKey:      c.PublicKey,

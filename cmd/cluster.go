@@ -36,6 +36,7 @@ func init() {
 	createClusterCmd.PersistentFlags().StringVarP(&memory, "memory", "m", "12G", "")
 	createClusterCmd.PersistentFlags().IntVarP(&cpu, "cpu", "v", 4, "")
 	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "10G", "")
+	createClusterCmd.LocalFlags().StringVarP(&distribution, "distribution", "p", "ubutntu", "")
 	createClusterCmd.PersistentFlags().StringVarP(&pubKeyPath, "publickey", "k", "", "")
 
 }
@@ -104,7 +105,10 @@ func createCluster() error {
 			Name: nw,
 		},
 		Image: image.Image{
-			Name: img,
+			Name:             img,
+			Distribution:     distribution,
+			ImageType:        image.DISTRIBUTION,
+			LibvirtImagePath: "/var/lib/libvirt/images",
 		},
 		Suffix:     suffix,
 		Worker:     worker,

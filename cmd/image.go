@@ -12,7 +12,7 @@ var (
 	url          string
 	md5url       string
 	path         string
-	pool         string
+	distribution string
 	locationType string
 )
 
@@ -22,7 +22,7 @@ func init() {
 	createImageCmd.PersistentFlags().StringVarP(&md5url, "md5url", "m", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&path, "path", "p", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&locationType, "locationtype", "l", "", "")
-	createImageCmd.PersistentFlags().StringVarP(&pool, "pool", "s", "", "")
+	deleteImageCmd.PersistentFlags().StringVarP(&distribution, "distribution", "d", "", "")
 }
 
 func initImageConfig() {
@@ -66,34 +66,32 @@ func createImage() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
-	if pool == "" {
-		pool = "gokvm"
+	if distribution == "" {
+		distribution = "ubuntu"
 	}
 	if path == "" {
 		path = "/var/lib/libvirt/images"
 	}
 	if url == "" {
 		url = "https://cloud-images.ubuntu.com/releases/focal/release-20210315/ubuntu-20.04-server-cloudimg-amd64.img"
-		url = "http://localhost:8000/ubuntu-20.04-server-cloudimg-amd64.img"
+		//url = "http://localhost:8000/ubuntu-20.04-server-cloudimg-amd64.img"
 	}
 	if locationType == "" {
 		locationType = string(image.URL)
 	}
 	i := image.Image{
 		Name:              name,
-		Pool:              pool,
-		Path:              path,
+		Distribution:      distribution,
+		ImagePath:         path,
 		ImageLocationType: image.ImageLocationType(locationType),
 		ImageLocation:     url,
+		ImageType:         image.DISTRIBUTION,
 	}
 	return i.Create()
 }
 
 func listImage() error {
-	if pool == "" {
-		pool = "gokvm"
-	}
-	images, err := image.List(pool)
+	images, err := image.List(image.DISTRIBUTION)
 	if err != nil {
 		return err
 	}
@@ -105,12 +103,13 @@ func deleteImage() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
-	if pool == "" {
-		pool = "gokvm"
+	if distribution == "" {
+		log.Fatal("Distribution name is required")
 	}
 	i := image.Image{
-		Name: name,
-		Pool: pool,
+		Name:         name,
+		Distribution: distribution,
+		ImageType:    image.DISTRIBUTION,
 	}
 	return i.Delete()
 }

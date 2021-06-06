@@ -8,6 +8,8 @@ import (
 	"github.com/kdomanski/iso9660"
 	"github.com/michaelhenkel/gokvm/image"
 	"gopkg.in/yaml.v3"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func (i *Instance) createCloudInit() (*image.Image, error) {
@@ -124,22 +126,26 @@ DNS=` + i.Network.DNSServer.String(),
 		return nil, err
 	}
 
-	img := &image.Image{
-		Pool:              i.Image.Pool,
-		Name:              fmt.Sprintf("%s-cloudinit", i.Name),
-		ImageLocationType: image.File,
-		ImageLocation:     out + "/cidata.iso",
-	}
-	if err := img.Create(); err != nil {
+	i.Image.Name = "cloudinit"
+	i.Image.Instance = i.Name
+	i.Image.ImageType = image.INSTANCE
+	i.Image.ImageLocationType = image.File
+	i.Image.ImageLocation = out + "/cidata.iso"
+	i.Image.ImageType = image.INSTANCE
+	log.Infof("%+v\n", i.Image)
+	if err := i.Image.Create(); err != nil {
 		return nil, err
 	}
 
-	newImg, err := image.Get(img.Name, img.Pool)
+	found, err := i.Image.Get()
 	if err != nil {
 		return nil, err
 	}
+	if !found {
+		return nil, fmt.Errorf("image not found!!!!")
+	}
 
-	return newImg, nil
+	return &i.Image, nil
 }
 
 type cloudInit struct {

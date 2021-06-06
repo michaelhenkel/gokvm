@@ -11,12 +11,14 @@ import (
 )
 
 func (i *Instance) createInstanceImage() (*image.Image, error) {
-	existingImg, err := image.Get(i.Name, i.Image.Pool)
+	i.Image.Instance = i.Name
+	i.Image.ImageType = image.INSTANCE
+	found, err := i.Image.Get()
 	if err != nil {
 		return nil, err
 	}
-	if existingImg != nil {
-		return existingImg, nil
+	if found {
+		return &i.Image, nil
 	}
 
 	out, err := ioutil.TempDir("/tmp", "prefix")
@@ -40,7 +42,7 @@ func (i *Instance) createInstanceImage() (*image.Image, error) {
 			return nil, err
 		}
 	*/
-	cmd := exec.Command("qemu-img", "create", "-b", i.Image.Path, "-f", "qcow2", "-F", "qcow2", fmt.Sprintf("%s/%s", out, i.Name), i.Resources.Disk)
+	cmd := exec.Command("qemu-img", "create", "-b", i.Image.LibvirtImagePath+"/"+i.Image.Distribution+"/"+i.Image.Name, "-f", "qcow2", "-F", "qcow2", fmt.Sprintf("%s/%s", out, i.Name), i.Resources.Disk)
 	_, err = cmd.Output()
 	if err != nil {
 		return nil, err
@@ -48,7 +50,7 @@ func (i *Instance) createInstanceImage() (*image.Image, error) {
 	//log.Info(string(stdout))
 	//qemu-img create -b ${imageName} -f qcow2 -F qcow2 ${libvirtImageLocation}/${imageName}-${clusterName}-${hostname}.qcow2 ${disk}
 	img := &image.Image{
-		Pool:              i.Image.Pool,
+		Instance:          i.Name,
 		Name:              i.Name,
 		ImageLocationType: image.File,
 		ImageLocation:     fmt.Sprintf("%s/%s", out, i.Name),
@@ -56,10 +58,5 @@ func (i *Instance) createInstanceImage() (*image.Image, error) {
 	if err := img.Create(); err != nil {
 		return nil, err
 	}
-	img, err = image.Get(img.Name, img.Pool)
-	if err != nil {
-		return nil, err
-	}
-
 	return img, nil
 }

@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/michaelhenkel/gokvm/qemu"
@@ -17,10 +19,13 @@ import (
 )
 
 type ImageLocationType string
+type ImageType string
 
 const (
-	URL  ImageLocationType = "url"
-	File ImageLocationType = "file"
+	URL          ImageLocationType = "url"
+	File         ImageLocationType = "file"
+	DISTRIBUTION ImageType         = "distribution"
+	INSTANCE     ImageType         = "instance"
 )
 
 type Image struct {
@@ -29,69 +34,91 @@ type Image struct {
 	ImageLocation     string
 	File              string
 	MD5Name           string
-	Path              string
-	Pool              string
+	LibvirtImagePath  string
+	ImagePath         string
+	Distribution      string
+	Instance          string
+	ImageType         ImageType
 }
 
 func DefaultImage() Image {
 	return Image{
-		Name:              "gokvm-default",
+		Name:              "ubuntu2004",
 		ImageLocationType: URL,
 		ImageLocation:     "https://cloud-images.ubuntu.com/releases/focal/release-20210315/ubuntu-20.04-server-cloudimg-amd64.img",
-		Path:              "/var/lib/libvirt/images",
-		Pool:              "gokvm",
+		LibvirtImagePath:  "/var/lib/libvirt/images",
+		Distribution:      "ubuntu",
+		ImageType:         DISTRIBUTION,
 	}
 }
 
-func Get(name string, poolName string) (*Image, error) {
-	images, err := List(poolName)
+func (i *Image) Get() (bool, error) {
+
+	images, err := List(i.ImageType)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	for _, img := range images {
-		if img.Name == name {
-			return img, nil
+		log.Infof("GET %+v\n", img)
+		if img.Name == i.Name {
+			if i.Distribution != "" && img.Distribution == i.Distribution {
+				*i = *img
+				return true, nil
+			}
+			if i.Instance != "" && img.Instance == i.Instance {
+				*i = *img
+				return true, nil
+			}
 		}
 	}
-	return nil, nil
+	return false, nil
 }
 
-func List(poolName string) ([]*Image, error) {
+func List(imageType ImageType) ([]*Image, error) {
 	l, err := qemu.Connnect()
 	if err != nil {
 		return nil, err
 	}
-	if poolName == "" {
-		poolName = "gokvm"
-	}
-	pool, err := l.LookupStoragePoolByName(poolName)
-	if err != nil {
-		lerr, ok := err.(libvirt.Error)
-		if !ok {
-			return nil, err
-		}
-		if lerr.Code == libvirt.ERR_NO_STORAGE_POOL {
-			return nil, nil
-		}
-		return nil, err
-	}
-	vols, err := pool.ListAllStorageVolumes(0)
+	pools, err := l.ListAllStoragePools(0)
 	if err != nil {
 		return nil, err
 	}
 	var images []*Image
-	for _, vol := range vols {
-		img, err := volumeToImage(vol, poolName)
+	for _, pool := range pools {
+		poolName, err := pool.GetName()
 		if err != nil {
 			return nil, err
 		}
-		images = append(images, img)
+		var poolNameString string
+		poolNameList := strings.Split(poolName, ":")
+		switch imageType {
+		case DISTRIBUTION:
+			if len(poolNameList) == 3 && poolNameList[0] == "gokvm" && poolNameList[1] == "distribution" {
+				poolNameString = poolNameList[2]
+			}
+		case INSTANCE:
+			if len(poolNameList) == 3 && poolNameList[0] == "gokvm" && poolNameList[1] == "instance" {
+				poolNameString = poolNameList[2]
+			}
+		}
+		if poolNameString != "" {
+			vols, err := pool.ListAllStorageVolumes(0)
+			if err != nil {
+				return nil, err
+			}
+			for _, vol := range vols {
+				img, err := volumeToImage(vol, poolNameString)
+				if err != nil {
+					return nil, err
+				}
+				images = append(images, img)
+			}
+		}
 	}
-
 	return images, nil
 }
 
-func volumeToImage(vol libvirt.StorageVol, poolName string) (*Image, error) {
+func volumeToImage(vol libvirt.StorageVol, distroName string) (*Image, error) {
 	volXML, err := vol.GetXMLDesc(0)
 	if err != nil {
 		return nil, err
@@ -100,20 +127,30 @@ func volumeToImage(vol libvirt.StorageVol, poolName string) (*Image, error) {
 	if err := xmlVol.Unmarshal(volXML); err != nil {
 		return nil, err
 	}
-	return &Image{
-		Name: xmlVol.Name,
-		Path: xmlVol.Key,
-		Pool: poolName,
-	}, nil
+	img := &Image{
+		Name:             xmlVol.Name,
+		ImagePath:        xmlVol.Key,
+		LibvirtImagePath: filepath.Dir(filepath.Dir(filepath.Dir(xmlVol.Key))),
+	}
+	imageType := filepath.Base(filepath.Dir(filepath.Dir(xmlVol.Key)))
+	switch imageType {
+	case string(INSTANCE):
+		img.ImageType = INSTANCE
+		img.Instance = filepath.Base(filepath.Dir(xmlVol.Key))
+	case string(DISTRIBUTION):
+		img.ImageType = DISTRIBUTION
+		img.Distribution = filepath.Base(filepath.Dir(xmlVol.Key))
+	}
+	return img, nil
 }
 
 func Render(images []*Image) {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.AppendHeader(table.Row{"Pool", "Volume"})
+	t.AppendHeader(table.Row{"Distribution", "Image"})
 	var tableRows []table.Row
 	for _, img := range images {
-		tableRows = append(tableRows, table.Row{img.Pool, img.Name})
+		tableRows = append(tableRows, table.Row{img.Distribution, img.Name})
 	}
 	t.AppendRows(tableRows)
 	t.SetStyle(table.StyleLight)
@@ -125,7 +162,14 @@ func (i *Image) Delete() error {
 	if err != nil {
 		return nil
 	}
-	pool, err := l.LookupStoragePoolByName(i.Pool)
+	var poolName string
+	switch i.ImageType {
+	case DISTRIBUTION:
+		poolName = fmt.Sprintf("gokvm:distribution:%s", i.Distribution)
+	case INSTANCE:
+		poolName = fmt.Sprintf("gokvm:instance:%s", i.Instance)
+	}
+	pool, err := l.LookupStoragePoolByName(poolName)
 	if err != nil {
 		return nil
 	}
@@ -167,7 +211,14 @@ func (i *Image) Create() error {
 	if err != nil {
 		return nil
 	}
-	pool, err := l.LookupStoragePoolByName(i.Pool)
+	var poolName string
+	switch i.ImageType {
+	case DISTRIBUTION:
+		poolName = fmt.Sprintf("gokvm:distribution:%s", i.Distribution)
+	case INSTANCE:
+		poolName = fmt.Sprintf("gokvm:instance:%s", i.Instance)
+	}
+	pool, err := l.LookupStoragePoolByName(poolName)
 	if err != nil {
 		return nil
 	}
@@ -180,6 +231,13 @@ func (i *Image) Create() error {
 		if lerr.Code == libvirt.ERR_NO_STORAGE_VOL {
 			return i.createVolume(pool, l)
 		}
+	}
+	found, err := i.Get()
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("image not created")
 	}
 	return nil
 
@@ -272,10 +330,6 @@ func (i *Image) createVolume(pool *libvirt.StoragePool, l *libvirt.Connect) erro
 	return nil
 }
 
-func uploadVolume() {
-
-}
-
 func readNBytes(r *bufio.Reader, peek int64) ([]byte, error) {
 	return ioutil.ReadAll(io.LimitReader(r, peek))
 }
@@ -285,20 +339,40 @@ func (i *Image) createPool() error {
 	if err != nil {
 		return err
 	}
-	_, err = l.LookupStoragePoolByName(i.Pool)
+	var poolName string
+	switch i.ImageType {
+	case DISTRIBUTION:
+		poolName = fmt.Sprintf("gokvm:distribution:%s", i.Distribution)
+		i.ImagePath = fmt.Sprintf("%s/distribution/%s", i.LibvirtImagePath, i.Distribution)
+		if _, err := os.Stat(fmt.Sprintf("%s/distribution", i.LibvirtImagePath)); os.IsNotExist(err) {
+			if err := os.Mkdir(fmt.Sprintf("%s/distribution", i.LibvirtImagePath), 0755); err != nil {
+				return err
+			}
+		}
+	case INSTANCE:
+		poolName = fmt.Sprintf("gokvm:instance:%s", i.Instance)
+		i.ImagePath = fmt.Sprintf("%s/instance/%s", i.LibvirtImagePath, i.Instance)
+		if _, err := os.Stat(fmt.Sprintf("%s/instance", i.LibvirtImagePath)); os.IsNotExist(err) {
+			if err := os.Mkdir(fmt.Sprintf("%s/instance", i.LibvirtImagePath), 0755); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = l.LookupStoragePoolByName(poolName)
 	if err == nil {
 		return nil
 	}
-	if _, err := os.Stat(fmt.Sprintf("%s/%s", i.Path, i.Pool)); os.IsNotExist(err) {
-		if err := os.Mkdir(fmt.Sprintf("%s/%s", i.Path, i.Pool), 0755); err != nil {
+	log.Infof("image %+v\n", i)
+	if _, err := os.Stat(i.ImagePath); os.IsNotExist(err) {
+		if err := os.Mkdir(i.ImagePath, 0755); err != nil {
 			return err
 		}
 	}
 	storagePool := &libvirtxml.StoragePool{
-		Name: i.Pool,
+		Name: poolName,
 		Type: "dir",
 		Target: &libvirtxml.StoragePoolTarget{
-			Path: fmt.Sprintf("%s/%s", i.Path, i.Pool),
+			Path: i.ImagePath,
 		},
 	}
 	poolXML, err := storagePool.Marshal()

@@ -2,11 +2,13 @@ package instance
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/metadata"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/michaelhenkel/gokvm/qemu"
+	log "github.com/sirupsen/logrus"
 
 	"libvirt.org/libvirt-go"
 
@@ -74,21 +76,23 @@ func (i *Instance) Delete() error {
 		if err := domain.Undefine(); err != nil {
 			return err
 		}
-		img, err := image.Get(i.Name, i.Image.Pool)
+		i.Image.Instance = i.Name
+		found, err := i.Image.Get()
 		if err != nil {
 			return err
 		}
-		if img != nil {
-			if err := img.Delete(); err != nil {
+		if found {
+			if err := i.Image.Delete(); err != nil {
 				return err
 			}
 		}
-		cloudInitImg, err := image.Get(fmt.Sprintf("%s-cloudinit", i.Name), i.Image.Pool)
+		i.Image.Name = fmt.Sprintf("%s-cloudinit", i.Name)
+		found, err = i.Image.Get()
 		if err != nil {
 			return err
 		}
-		if cloudInitImg != nil {
-			if err := cloudInitImg.Delete(); err != nil {
+		if found {
+			if err := i.Image.Delete(); err != nil {
 				return err
 			}
 		}
@@ -97,20 +101,24 @@ func (i *Instance) Delete() error {
 }
 
 func (i *Instance) Create() error {
+	log.Infof("INSTANCE %+v\n", i.Image)
+	i.Image.ImagePath = fmt.Sprintf("%s/%s", i.Image.LibvirtImagePath, i.Name)
 	cloudInitImg, err := i.createCloudInit()
 	if err != nil {
 		return err
 	}
+	os.Exit(0) //CHECK
 	img, err := i.createInstanceImage()
 	if err != nil {
 		return err
 	}
-	baseImg, err := image.Get(i.Image.Name, i.Image.Pool)
+	found, err := i.Image.Get()
 	if err != nil {
 		return err
 	}
-
-	//subnetString := fmt.Sprintf("%s/%s", i.Network.Subnet.IP.String(), i.Network.Subnet.Mask.String())
+	if !found {
+		return fmt.Errorf("base image not found")
+	}
 	m := &metadata.Metadata{
 		Cluster: &i.ClusterName,
 	}
@@ -155,7 +163,7 @@ func (i *Instance) Create() error {
 		},
 		Source: &libvirtxml.DomainDiskSource{
 			File: &libvirtxml.DomainDiskSourceFile{
-				File: cloudInitImg.Path,
+				File: cloudInitImg.ImagePath + "/cloudinit",
 			},
 			Index: 2,
 		},
@@ -185,7 +193,7 @@ func (i *Instance) Create() error {
 		},
 		Source: &libvirtxml.DomainDiskSource{
 			File: &libvirtxml.DomainDiskSourceFile{
-				File: img.Path,
+				File: img.ImagePath + "/" + i.Name + "/disk",
 			},
 		},
 		BackingStore: &libvirtxml.DomainDiskBackingStore{
@@ -194,7 +202,7 @@ func (i *Instance) Create() error {
 			},
 			Source: &libvirtxml.DomainDiskSource{
 				File: &libvirtxml.DomainDiskSourceFile{
-					File: baseImg.Path,
+					File: img.ImagePath + "/" + img.Distribution + "/" + img.Name,
 				},
 			},
 		},
