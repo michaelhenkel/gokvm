@@ -39,6 +39,7 @@ type Image struct {
 	Distribution      string
 	Instance          string
 	ImageType         ImageType
+	BackingImage      *Image
 }
 
 func DefaultImage() Image {
@@ -59,7 +60,6 @@ func (i *Image) Get() (bool, error) {
 		return false, err
 	}
 	for _, img := range images {
-		log.Infof("GET %+v\n", img)
 		if img.Name == i.Name {
 			if i.Distribution != "" && img.Distribution == i.Distribution {
 				*i = *img
@@ -257,10 +257,9 @@ func (i *Image) createVolume(pool *libvirt.StoragePool, l *libvirt.Connect) erro
 	}
 	defer out.Close()
 
-	log.Infof("Downloading image from %s\n", i.ImageLocation)
 	switch i.ImageLocationType {
 	case URL:
-
+		log.Infof("Downloading image from %s\n", i.ImageLocation)
 		resp, err := http.Get(i.ImageLocation)
 		if err != nil {
 			return err
@@ -362,7 +361,6 @@ func (i *Image) createPool() error {
 	if err == nil {
 		return nil
 	}
-	log.Infof("image %+v\n", i)
 	if _, err := os.Stat(i.ImagePath); os.IsNotExist(err) {
 		if err := os.Mkdir(i.ImagePath, 0755); err != nil {
 			return err

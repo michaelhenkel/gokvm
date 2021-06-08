@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	code.cloudfoundry.org/bytefmt v0.0.0-20210524144015-27119551aaea // indirect
+	github.com/cheggaaa/pb/v3 v3.0.8 // indirect
 	github.com/digitalocean/go-libvirt v0.0.0-20210524223541-696696fc24e0
 	github.com/google/uuid v1.2.0
 	github.com/jedib0t/go-pretty/v6 v6.2.2

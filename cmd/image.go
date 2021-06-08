@@ -22,6 +22,7 @@ func init() {
 	createImageCmd.PersistentFlags().StringVarP(&md5url, "md5url", "m", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&path, "path", "p", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&locationType, "locationtype", "l", "", "")
+	createImageCmd.PersistentFlags().StringVarP(&distribution, "distribution", "d", "", "")
 	deleteImageCmd.PersistentFlags().StringVarP(&distribution, "distribution", "d", "", "")
 }
 
@@ -82,10 +83,10 @@ func createImage() error {
 	i := image.Image{
 		Name:              name,
 		Distribution:      distribution,
-		ImagePath:         path,
 		ImageLocationType: image.ImageLocationType(locationType),
 		ImageLocation:     url,
 		ImageType:         image.DISTRIBUTION,
+		LibvirtImagePath:  path,
 	}
 	return i.Create()
 }

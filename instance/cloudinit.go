@@ -8,8 +8,6 @@ import (
 	"github.com/kdomanski/iso9660"
 	"github.com/michaelhenkel/gokvm/image"
 	"gopkg.in/yaml.v3"
-
-	log "github.com/sirupsen/logrus"
 )
 
 func (i *Instance) createCloudInit() (*image.Image, error) {
@@ -132,7 +130,6 @@ DNS=` + i.Network.DNSServer.String(),
 	i.Image.ImageLocationType = image.File
 	i.Image.ImageLocation = out + "/cidata.iso"
 	i.Image.ImageType = image.INSTANCE
-	log.Infof("%+v\n", i.Image)
 	if err := i.Image.Create(); err != nil {
 		return nil, err
 	}

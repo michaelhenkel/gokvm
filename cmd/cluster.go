@@ -8,6 +8,7 @@ import (
 	"github.com/michaelhenkel/gokvm/cluster"
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
+	"github.com/michaelhenkel/gokvm/ks"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/spf13/cobra"
 
@@ -15,15 +16,16 @@ import (
 )
 
 var (
-	img        string
-	nw         string
-	suffix     string
-	worker     int
-	controller int
-	pubKeyPath string
-	cpu        int
-	memory     string
-	disk       string
+	img          string
+	nw           string
+	suffix       string
+	worker       int
+	controller   int
+	pubKeyPath   string
+	cpu          int
+	memory       string
+	disk         string
+	k8sinventory bool
 )
 
 func init() {
@@ -36,8 +38,9 @@ func init() {
 	createClusterCmd.PersistentFlags().StringVarP(&memory, "memory", "m", "12G", "")
 	createClusterCmd.PersistentFlags().IntVarP(&cpu, "cpu", "v", 4, "")
 	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "10G", "")
-	createClusterCmd.LocalFlags().StringVarP(&distribution, "distribution", "p", "ubutntu", "")
+	createClusterCmd.PersistentFlags().StringVarP(&distribution, "distribution", "p", "ubuntu", "")
 	createClusterCmd.PersistentFlags().StringVarP(&pubKeyPath, "publickey", "k", "", "")
+	createClusterCmd.PersistentFlags().BoolVarP(&k8sinventory, "inventory", "y", false, "")
 
 }
 
@@ -120,7 +123,27 @@ func createCluster() error {
 			Disk:   disk,
 		},
 	}
-	return cl.Create()
+	if err := cl.Create(); err != nil {
+		return err
+	}
+
+	clusterList, err := cluster.List()
+	if err != nil {
+		return err
+	}
+	if k8sinventory {
+		for _, newCL := range clusterList {
+			if newCL.Name == cl.Name {
+				if err := ks.Build(newCL); err != nil {
+					return err
+				}
+				break
+
+			}
+		}
+	}
+
+	return nil
 }
 
 func listCluster() error {

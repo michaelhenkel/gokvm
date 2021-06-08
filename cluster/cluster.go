@@ -3,7 +3,9 @@ package cluster
 import (
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/cheggaaa/pb/v3"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
@@ -51,9 +53,11 @@ func Render(clusters []*Cluster) {
 	t.AppendHeader(table.Row{"Cluster", "Instances", "IP"})
 	for _, cluster := range clusters {
 		for _, inst := range cluster.Instances {
+			ip := "not allocated yet"
 			for _, addr := range inst.IPAddresses {
-				t.AppendRow(table.Row{cluster.Name, inst.Name, addr}, rowConfigAutoMerge)
+				ip = addr
 			}
+			t.AppendRow(table.Row{cluster.Name, inst.Name, ip}, rowConfigAutoMerge)
 		}
 
 	}
@@ -114,7 +118,6 @@ func (c *Cluster) Create() error {
 	}
 
 	for i := 0; i < c.Controller; i++ {
-		log.Infof("CLUSTER %+v\n", c.Image)
 		inst := instance.Instance{
 			Name:        fmt.Sprintf("c-instance-%d.%s.%s", i, c.Name, c.Suffix),
 			PubKey:      c.PublicKey,
@@ -142,6 +145,47 @@ func (c *Cluster) Create() error {
 			return err
 		}
 	}
+	if err := c.waitForAddress(); err != nil {
+		return nil
+	}
 
+	return nil
+}
+
+func (c *Cluster) waitForAddress() error {
+	clusters, err := List()
+	if err != nil {
+		return err
+	}
+	var cl *Cluster
+	for _, cluster := range clusters {
+		if cluster.Name == c.Name {
+			cl = cluster
+		}
+	}
+	bar := pb.StartNew(len(cl.Instances))
+	done := make(chan struct{})
+	foundIPCounter := 0
+	//start := time.Now()
+	log.Info("Waiting for instances to get an ip address")
+	for _, inst := range cl.Instances {
+		go func(inst *instance.Instance) {
+			for {
+				inst, _ := instance.Get(inst.Name, c.Name)
+				if len(inst.IPAddresses) > 0 {
+					bar.Increment()
+					time.Sleep(time.Millisecond)
+					foundIPCounter = foundIPCounter + 1
+					if foundIPCounter == len(cl.Instances) {
+						done <- struct{}{}
+					}
+				} else {
+					time.Sleep(time.Second * 1)
+				}
+			}
+		}(inst)
+	}
+	<-done
+	bar.Finish()
 	return nil
 }
