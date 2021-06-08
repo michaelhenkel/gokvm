@@ -5,11 +5,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/cheggaaa/pb/v3"
+	"github.com/briandowns/spinner"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/network"
+	"github.com/michaelhenkel/gokvm/ssh"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -149,10 +150,54 @@ func (c *Cluster) Create() error {
 		}
 	}
 	if err := c.waitForAddress(); err != nil {
-		return nil
+		return err
+	}
+	if err := c.waitForSSH(); err != nil {
+		return err
 	}
 
 	return nil
+}
+
+func (c *Cluster) waitForSSH() error {
+	clusters, err := List()
+	if err != nil {
+		return err
+	}
+	var cl *Cluster
+	for _, cluster := range clusters {
+		if cluster.Name == c.Name {
+			cl = cluster
+		}
+	}
+	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+	s.Prefix = "Waiting for instances ssh: "
+	s.Start()
+	done := make(chan error)
+	foundIPCounter := 0
+	for _, inst := range cl.Instances {
+		go func(inst *instance.Instance) {
+			newInst, _ := instance.Get(inst.Name, c.Name)
+			if len(newInst.IPAddresses) > 0 {
+				if err := ssh.SSHKeyScan("root", newInst.IPAddresses[0]); err != nil {
+					done <- err
+				}
+				time.Sleep(time.Millisecond)
+				foundIPCounter = foundIPCounter + 1
+				if foundIPCounter == len(cl.Instances) {
+					done <- nil
+				}
+			}
+		}(inst)
+	}
+	err = <-done
+	s.Stop()
+	switch err {
+	case nil:
+		return nil
+	default:
+		return err
+	}
 }
 
 func (c *Cluster) waitForAddress() error {
@@ -166,17 +211,16 @@ func (c *Cluster) waitForAddress() error {
 			cl = cluster
 		}
 	}
-	bar := pb.StartNew(len(cl.Instances))
+	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+	s.Prefix = "Waiting for instances ip: "
+	s.Start()
 	done := make(chan struct{})
 	foundIPCounter := 0
-	//start := time.Now()
-	log.Info("Waiting for instances to get an ip address")
 	for _, inst := range cl.Instances {
 		go func(inst *instance.Instance) {
 			for {
 				inst, _ := instance.Get(inst.Name, c.Name)
 				if len(inst.IPAddresses) > 0 {
-					bar.Increment()
 					time.Sleep(time.Millisecond)
 					foundIPCounter = foundIPCounter + 1
 					if foundIPCounter == len(cl.Instances) {
@@ -189,6 +233,6 @@ func (c *Cluster) waitForAddress() error {
 		}(inst)
 	}
 	<-done
-	bar.Finish()
+	s.Stop()
 	return nil
 }

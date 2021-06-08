@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"code.cloudfoundry.org/bytefmt"
 	"github.com/michaelhenkel/gokvm/ansible"
@@ -13,7 +12,9 @@ import (
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/ks"
 	"github.com/michaelhenkel/gokvm/network"
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/tools/clientcmd"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -155,10 +156,13 @@ func createCluster() error {
 	}
 
 	if runAnsible {
-		time.Sleep(time.Second * 120)
-		if err := ansible.Run(k8sinventory, gitLocation+"/cluster.yml"); err != nil {
+		if err := ansible.Run(k8sinventory, gitLocation+"/cluster.yml", cl.Name); err != nil {
 			return err
 		}
+	}
+
+	if err := mergeKubeconfig(cl.Name); err != nil {
+		return err
 	}
 
 	return nil
@@ -181,4 +185,38 @@ func deleteCluster() error {
 		Name: name,
 	}
 	return cl.Delete()
+}
+
+func mergeKubeconfig(clusterName string) error {
+	kubeConfigPath, err := findKubeConfig()
+	if err != nil {
+		return err
+	}
+	loadingRules := clientcmd.ClientConfigLoadingRules{
+		Precedence: []string{"/tmp/" + clusterName + "/admin.conf", kubeConfigPath},
+	}
+
+	fmt.Println(kubeConfigPath)
+
+	newKubeConfig, err := clientcmd.LoadFromFile("/tmp/" + clusterName + "/admin.conf")
+	if err != nil {
+		return err
+	}
+	mergedConfig, err := loadingRules.Load()
+	if err != nil {
+		return err
+	}
+	mergedConfig.CurrentContext = newKubeConfig.CurrentContext
+	if err := clientcmd.WriteToFile(*mergedConfig, kubeConfigPath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func findKubeConfig() (string, error) {
+	path, err := homedir.Expand("~/.kube/config")
+	if err != nil {
+		return "", err
+	}
+	return path, nil
 }

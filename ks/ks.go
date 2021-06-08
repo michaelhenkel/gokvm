@@ -104,7 +104,7 @@ func Build(cluster *cluster.Cluster, inventoryLocation string) error {
 		return err
 	}
 	inventoryString := strings.Replace(string(inventoryByte), "{}", "", -1)
-	fmt.Print(string(inventoryString))
+	//fmt.Print(string(inventoryString))
 	if err := os.WriteFile(inventoryLocation, []byte(inventoryString), 0600); err != nil {
 		return err
 	}
