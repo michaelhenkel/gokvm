@@ -11,6 +11,8 @@ type Metadata struct {
 	Image   *string  `xml:"image"`
 	Cluster *string  `xml:"cluster"`
 	Subnet  *string  `xml:"subnet"`
+	Role    *string  `xml:"role"`
+	Suffix  *string  `xml:"suffix"`
 }
 
 func GetMetadata(metadata string) (*Metadata, error) {
@@ -23,11 +25,14 @@ func GetMetadata(metadata string) (*Metadata, error) {
 }
 
 func getXMLLine(in *string, t string) string {
-	return fmt.Sprintf("<gokvm:%s xmlns:gokvm=\"http://gokvm\">%s</gokvm:%s>", t, *in, t)
+	return fmt.Sprintf("<%s:%s xmlns:%s=\"http://%s/%s\">%s</%s:%s>", t, t, t, t, t, *in, t, t)
 }
 
 func (m *Metadata) InstanceMetadata() string {
 	var metadataString string
+	if m.Role != nil {
+		metadataString = metadataString + getXMLLine(m.Role, "role")
+	}
 	if m.Subnet != nil {
 		metadataString = metadataString + getXMLLine(m.Subnet, "subnet")
 	}
@@ -40,6 +45,8 @@ func (m *Metadata) InstanceMetadata() string {
 	if m.Image != nil {
 		metadataString = metadataString + getXMLLine(m.Image, "image")
 	}
+	if m.Suffix != nil {
+		metadataString = metadataString + getXMLLine(m.Suffix, "suffix")
+	}
 	return metadataString
-
 }

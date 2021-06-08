@@ -2,6 +2,8 @@ package ks
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 
@@ -10,8 +12,7 @@ import (
 )
 
 type Host struct {
-	AnsibleHost   string `yaml:"ansible_host"`
-	AnsibleBecome bool   `yaml:"ansible_become"`
+	AnsibleHost string `yaml:"ansible_host"`
 }
 
 type All struct {
@@ -20,19 +21,19 @@ type All struct {
 }
 
 type KubeMaster struct {
-	Hosts map[string]interface{}
+	Hosts map[string]struct{}
 }
 
 type KubeNode struct {
-	Hosts map[string]interface{}
+	Hosts map[string]struct{}
 }
 
 type Etcd struct {
-	Hosts map[string]interface{}
+	Hosts map[string]struct{}
 }
 
 type K8SCluster struct {
-	Children map[string]string `yaml:"children"`
+	Children map[string]struct{} `yaml:"children"`
 }
 
 type Inventory struct {
@@ -43,24 +44,23 @@ type Inventory struct {
 	K8SCluster K8SCluster `yaml:"k8s-cluster"`
 }
 
-func Build(cluster *cluster.Cluster) error {
+func Build(cluster *cluster.Cluster, inventoryLocation string) error {
 	var allHosts = make(map[string]Host)
-	var kubeMasterHosts = make(map[string]interface{})
-	var kubeNodeHosts = make(map[string]interface{})
-	var etcdHosts = make(map[string]interface{})
+	var kubeMasterHosts = make(map[string]struct{})
+	var kubeNodeHosts = make(map[string]struct{})
+	var etcdHosts = make(map[string]struct{})
 
 	for _, inst := range cluster.Instances {
 		allHosts[inst.Name] = Host{
-			AnsibleHost:   inst.IPAddresses[0],
-			AnsibleBecome: true,
+			AnsibleHost: inst.IPAddresses[0],
 		}
 		switch inst.Role {
 		case instance.Controller:
-			kubeMasterHosts[inst.Name] = ""
-			etcdHosts[inst.Name] = ""
+			kubeMasterHosts[inst.Name] = struct{}{}
+			etcdHosts[inst.Name] = struct{}{}
 
 		case instance.Worker:
-			kubeNodeHosts[inst.Name] = ""
+			kubeNodeHosts[inst.Name] = struct{}{}
 		}
 
 	}
@@ -68,11 +68,19 @@ func Build(cluster *cluster.Cluster) error {
 		All: All{
 			Hosts: allHosts,
 			Vars: map[string]string{
-				"docker_image_repo":            "svl-artifactory.juniper.net/atom-docker-remote",
-				"cluster_name":                 fmt.Sprintf("%s.%s", cluster.Name, cluster.Suffix),
-				"artifacts_dir":                "/tmp/cluster1",
-				"kubectl.cluster.localhost":    "true",
-				"kubeconfig.cluster.localhost": "true",
+				"docker_image_repo":          "svl-artifactory.juniper.net/atom-docker-remote",
+				"cluster_name":               fmt.Sprintf("%s.%s", cluster.Name, cluster.Suffix),
+				"artifacts_dir":              "/tmp/cluster1",
+				"kube_network_plugin":        "cni",
+				"kube_network_plugin_multus": "false",
+				"kubectl_localhost":          "true",
+				"kubeconfig_localhost":       "true",
+				"override_system_hostname":   "true",
+				"container_manager":          "crio",
+				"kubelet_deployment_type":    "host",
+				"download_container":         "false",
+				"etcd_deployment_type":       "host",
+				"host_key_checking":          "false",
 			},
 		},
 		KubeMaster: KubeMaster{
@@ -85,9 +93,9 @@ func Build(cluster *cluster.Cluster) error {
 			Hosts: etcdHosts,
 		},
 		K8SCluster: K8SCluster{
-			Children: map[string]string{
-				"kube-master": "",
-				"kube-node":   "",
+			Children: map[string]struct{}{
+				"kube-master": struct{}{},
+				"kube-node":   struct{}{},
 			},
 		},
 	}
@@ -95,7 +103,11 @@ func Build(cluster *cluster.Cluster) error {
 	if err != nil {
 		return err
 	}
-	fmt.Print(string(inventoryByte))
+	inventoryString := strings.Replace(string(inventoryByte), "{}", "", -1)
+	fmt.Print(string(inventoryString))
+	if err := os.WriteFile(inventoryLocation, []byte(inventoryString), 0600); err != nil {
+		return err
+	}
 	return nil
 
 }

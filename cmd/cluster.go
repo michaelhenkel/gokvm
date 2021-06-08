@@ -3,9 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"code.cloudfoundry.org/bytefmt"
+	"github.com/michaelhenkel/gokvm/ansible"
 	"github.com/michaelhenkel/gokvm/cluster"
+	"github.com/michaelhenkel/gokvm/git"
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/ks"
@@ -25,7 +28,9 @@ var (
 	cpu          int
 	memory       string
 	disk         string
-	k8sinventory bool
+	k8sinventory string
+	gitLocation  string
+	runAnsible   bool
 )
 
 func init() {
@@ -40,8 +45,9 @@ func init() {
 	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "10G", "")
 	createClusterCmd.PersistentFlags().StringVarP(&distribution, "distribution", "p", "ubuntu", "")
 	createClusterCmd.PersistentFlags().StringVarP(&pubKeyPath, "publickey", "k", "", "")
-	createClusterCmd.PersistentFlags().BoolVarP(&k8sinventory, "inventory", "y", false, "")
-
+	createClusterCmd.PersistentFlags().StringVarP(&k8sinventory, "inventory", "y", "", "")
+	createClusterCmd.PersistentFlags().StringVarP(&gitLocation, "gitlocation", "g", "", "")
+	createClusterCmd.PersistentFlags().BoolVarP(&runAnsible, "run", "r", false, "")
 }
 
 func initClusterConfig() {
@@ -131,15 +137,27 @@ func createCluster() error {
 	if err != nil {
 		return err
 	}
-	if k8sinventory {
+	if k8sinventory != "" {
 		for _, newCL := range clusterList {
 			if newCL.Name == cl.Name {
-				if err := ks.Build(newCL); err != nil {
+				if err := ks.Build(newCL, k8sinventory); err != nil {
 					return err
 				}
 				break
 
 			}
+		}
+	}
+	if gitLocation != "" {
+		if err := git.Clone(gitLocation); err != nil {
+			return err
+		}
+	}
+
+	if runAnsible {
+		time.Sleep(time.Second * 120)
+		if err := ansible.Run(k8sinventory, gitLocation+"/cluster.yml"); err != nil {
+			return err
 		}
 	}
 

@@ -132,11 +132,13 @@ func (i *Instance) Create() error {
 	if !found {
 		return fmt.Errorf("base image not found")
 	}
+	role := string(i.Role)
 	m := &metadata.Metadata{
 		Cluster: &i.ClusterName,
+		Suffix:  &i.Suffix,
+		Role:    &role,
 	}
 	domainMetadata := m.InstanceMetadata()
-
 	defaultDomain, err := defaultDomain()
 	if err != nil {
 		return err
@@ -331,7 +333,14 @@ func List(cluster string) ([]*Instance, error) {
 		if *md.Cluster != cluster && cluster != "" {
 			continue
 		}
-		inst, err := domainToInstance(domain, *md.Cluster)
+		var role, suffix string
+		if *md.Role != "" {
+			role = *md.Role
+		}
+		if *md.Suffix != "" {
+			suffix = *md.Suffix
+		}
+		inst, err := domainToInstance(domain, *md.Cluster, role, suffix)
 		if err != nil {
 			return nil, err
 		}
@@ -340,7 +349,7 @@ func List(cluster string) ([]*Instance, error) {
 	return instanceList, nil
 }
 
-func domainToInstance(domain libvirt.Domain, cluster string) (*Instance, error) {
+func domainToInstance(domain libvirt.Domain, cluster string, role string, suffix string) (*Instance, error) {
 	instName, err := domain.GetName()
 	if err != nil {
 		return nil, err
@@ -360,6 +369,8 @@ func domainToInstance(domain libvirt.Domain, cluster string) (*Instance, error) 
 		Name:        instName,
 		ClusterName: cluster,
 		IPAddresses: ipaddresses,
+		Role:        Role(role),
+		Suffix:      suffix,
 	}, nil
 }
 

@@ -40,6 +40,7 @@ func List() ([]*Cluster, error) {
 		cl := &Cluster{
 			Name:      k,
 			Instances: v,
+			Suffix:    v[0].Suffix,
 		}
 		clusterList = append(clusterList, cl)
 	}
@@ -126,6 +127,7 @@ func (c *Cluster) Create() error {
 			ClusterName: c.Name,
 			Suffix:      c.Suffix,
 			Resources:   c.Resources,
+			Role:        instance.Controller,
 		}
 		if err := inst.Create(); err != nil {
 			return err
@@ -140,6 +142,7 @@ func (c *Cluster) Create() error {
 			ClusterName: c.Name,
 			Suffix:      c.Suffix,
 			Resources:   c.Resources,
+			Role:        instance.Worker,
 		}
 		if err := inst.Create(); err != nil {
 			return err

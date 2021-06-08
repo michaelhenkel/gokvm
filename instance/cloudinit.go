@@ -23,6 +23,7 @@ func (i *Instance) createCloudInit() (*image.Image, error) {
 			SSHAuthorizedKeys: []string{i.PubKey},
 		}, {
 			Name:              "root",
+			Sudo:              "ALL=(ALL) NOPASSWD:ALL",
 			SSHAuthorizedKeys: []string{i.PubKey},
 		}},
 		SSHPwauth:   true,
