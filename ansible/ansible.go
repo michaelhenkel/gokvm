@@ -8,17 +8,34 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/apenella/go-ansible/pkg/execute"
 	"github.com/apenella/go-ansible/pkg/playbook"
-	"github.com/briandowns/spinner"
+	"github.com/vbauerster/mpb/v7"
+	"github.com/vbauerster/mpb/v7/decor"
 
 	log "github.com/sirupsen/logrus"
 )
 
-func Run(inventory string, playbookLocation string, clusterName string) error {
+func Run2(inventory string, playbookLocation string, clusterName string) error {
 	log.Info("Running Kubespray")
+
+	pb := &playbook.AnsiblePlaybookCmd{
+		Playbooks: []string{playbookLocation},
+		Options: &playbook.AnsiblePlaybookOptions{
+			Inventory: inventory,
+		},
+	}
+
+	if err := pb.Run(context.TODO()); err != nil {
+		fmt.Println(err)
+	}
+
+	return nil
+}
+
+func Run(inventory string, playbookLocation string, clusterName string) error {
 	buff := new(bytes.Buffer)
 	errBuff := new(bytes.Buffer)
 	execute := execute.NewDefaultExecute(
@@ -32,10 +49,23 @@ func Run(inventory string, playbookLocation string, clusterName string) error {
 		},
 		Exec: execute,
 	}
-	taskCounter := 0
 	maxTaskNumber := 1555
-	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-	s.Start()
+	var wg sync.WaitGroup
+	p := mpb.New(mpb.WithWaitGroup(&wg), mpb.WithWidth(32))
+	bar := p.AddBar(int64(maxTaskNumber),
+		mpb.PrependDecorators(
+			// simple name decorator
+			decor.Name("deploying kubespray"),
+			decor.OnComplete(
+				// spinner decorator with default style
+				decor.Spinner(nil, decor.WCSyncSpace), "done",
+			),
+		),
+		mpb.AppendDecorators(
+			// decor.DSyncWidth bit enables column width synchronization
+			decor.Percentage(decor.WCSyncWidth),
+		),
+	)
 	var done = make(chan bool)
 	go func() {
 		if err := pb.Run(context.TODO()); err != nil {
@@ -51,24 +81,11 @@ func Run(inventory string, playbookLocation string, clusterName string) error {
 	defer f.Close()
 	go func() {
 		for {
-
 			r := bufio.NewReader(buff)
 			line, _, _ := r.ReadLine()
 			if string(line) != "" && strings.HasPrefix(string(line), "TASK") {
-				/*
-					submatchall := re.FindAllString(string(line), -1)
-					var lineString string
-					for _, element := range submatchall {
-						element = strings.Trim(element, "[")
-						element = strings.Trim(element, "]")
-						lineString = element
-					}
-				*/
-				taskCounter = taskCounter + 1
-				perc := fmt.Sprintf("%0.2f %%", PercentageChange(taskCounter, maxTaskNumber))
-				s.Prefix = fmt.Sprintf("%s ", perc)
-				s.Restart()
-				//fmt.Println(perc)
+				wg.Add(1)
+				increment(bar, &wg)
 			}
 			if string(line) != "" {
 				if _, err := f.WriteString(string(line) + "\n"); err != nil {
@@ -78,12 +95,18 @@ func Run(inventory string, playbookLocation string, clusterName string) error {
 
 		}
 	}()
+	defer wg.Done()
+	wg.Wait()
 	<-done
-
 	return nil
 }
 
 func PercentageChange(taskCounter, maxTaskNumber int) (delta float64) {
 	delta = 100 / float64(maxTaskNumber) * float64(taskCounter)
 	return
+}
+
+func increment(bar *mpb.Bar, wg *sync.WaitGroup) {
+
+	bar.Increment()
 }

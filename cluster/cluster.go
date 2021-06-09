@@ -3,14 +3,16 @@ package cluster
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
-	"github.com/briandowns/spinner"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/michaelhenkel/gokvm/ssh"
+	"github.com/vbauerster/mpb/v7"
+	"github.com/vbauerster/mpb/v7/decor"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -119,7 +121,26 @@ func (c *Cluster) Create() error {
 		c.Network = *networkExists
 	}
 
+	var wg sync.WaitGroup
+	total := 4
+	p := mpb.New(mpb.WithWaitGroup(&wg), mpb.WithWidth(32))
 	for i := 0; i < c.Controller; i++ {
+		name := fmt.Sprintf("c-instance-%d.%s.%s", i, c.Name, c.Suffix)
+		bar := p.AddBar(int64(total),
+			mpb.PrependDecorators(
+				// simple name decorator
+				decor.Name(name),
+				decor.OnComplete(
+					// spinner decorator with default style
+					decor.Spinner(nil, decor.WCSyncSpace), "done",
+				),
+			),
+			mpb.AppendDecorators(
+				// decor.DSyncWidth bit enables column width synchronization
+				decor.Percentage(decor.WCSyncWidth),
+			),
+		)
+
 		inst := instance.Instance{
 			Name:        fmt.Sprintf("c-instance-%d.%s.%s", i, c.Name, c.Suffix),
 			PubKey:      c.PublicKey,
@@ -130,11 +151,23 @@ func (c *Cluster) Create() error {
 			Resources:   c.Resources,
 			Role:        instance.Controller,
 		}
-		if err := inst.Create(); err != nil {
-			return err
-		}
+		wg.Add(1)
+		go c.createInstance(inst, &wg, bar)
 	}
 	for i := 0; i < c.Worker; i++ {
+		name := fmt.Sprintf("w-instance-%d.%s.%s", i, c.Name, c.Suffix)
+		bar := p.AddBar(int64(total),
+			mpb.PrependDecorators(
+				decor.Name(name),
+				decor.OnComplete(
+					decor.Spinner(nil, decor.WCSyncSpace), "done",
+				),
+			),
+			mpb.AppendDecorators(
+				decor.Percentage(decor.WCSyncWidth),
+			),
+		)
+
 		inst := instance.Instance{
 			Name:        fmt.Sprintf("w-instance-%d.%s.%s", i, c.Name, c.Suffix),
 			PubKey:      c.PublicKey,
@@ -145,94 +178,40 @@ func (c *Cluster) Create() error {
 			Resources:   c.Resources,
 			Role:        instance.Worker,
 		}
-		if err := inst.Create(); err != nil {
-			return err
-		}
+		wg.Add(1)
+		go c.createInstance(inst, &wg, bar)
+
 	}
-	if err := c.waitForAddress(); err != nil {
-		return err
-	}
-	if err := c.waitForSSH(); err != nil {
-		return err
-	}
+	wg.Wait()
 
 	return nil
 }
 
-func (c *Cluster) waitForSSH() error {
-	clusters, err := List()
-	if err != nil {
+func (c *Cluster) createInstance(inst instance.Instance, wg *sync.WaitGroup, bar *mpb.Bar) error {
+	defer wg.Done()
+	if err := inst.Create(bar); err != nil {
 		return err
 	}
-	var cl *Cluster
-	for _, cluster := range clusters {
-		if cluster.Name == c.Name {
-			cl = cluster
-		}
-	}
-	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-	s.Prefix = "Waiting for instances ssh: "
-	s.Start()
-	done := make(chan error)
-	foundIPCounter := 0
-	for _, inst := range cl.Instances {
-		go func(inst *instance.Instance) {
-			newInst, _ := instance.Get(inst.Name, c.Name)
-			if len(newInst.IPAddresses) > 0 {
-				if err := ssh.SSHKeyScan("root", newInst.IPAddresses[0]); err != nil {
-					done <- err
-				}
-				time.Sleep(time.Millisecond)
-				foundIPCounter = foundIPCounter + 1
-				if foundIPCounter == len(cl.Instances) {
-					done <- nil
-				}
-			}
-		}(inst)
-	}
-	err = <-done
-	s.Stop()
-	switch err {
-	case nil:
-		return nil
-	default:
+	bar.Increment()
+	if err := c.waitForSSH(bar, inst.Name); err != nil {
 		return err
 	}
+	bar.Increment()
+	return nil
+
 }
 
-func (c *Cluster) waitForAddress() error {
-	clusters, err := List()
-	if err != nil {
-		return err
-	}
-	var cl *Cluster
-	for _, cluster := range clusters {
-		if cluster.Name == c.Name {
-			cl = cluster
+func (c *Cluster) waitForSSH(bar *mpb.Bar, instName string) error {
+	for {
+		newInst, _ := instance.Get(instName, c.Name)
+		if len(newInst.IPAddresses) > 0 {
+			if err := ssh.SSHKeyScan("root", newInst.IPAddresses[0]); err != nil {
+				return err
+			}
+			return nil
+		} else {
+			time.Sleep(time.Millisecond)
 		}
 	}
-	s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
-	s.Prefix = "Waiting for instances ip: "
-	s.Start()
-	done := make(chan struct{})
-	foundIPCounter := 0
-	for _, inst := range cl.Instances {
-		go func(inst *instance.Instance) {
-			for {
-				inst, _ := instance.Get(inst.Name, c.Name)
-				if len(inst.IPAddresses) > 0 {
-					time.Sleep(time.Millisecond)
-					foundIPCounter = foundIPCounter + 1
-					if foundIPCounter == len(cl.Instances) {
-						done <- struct{}{}
-					}
-				} else {
-					time.Sleep(time.Second * 1)
-				}
-			}
-		}(inst)
-	}
-	<-done
-	s.Stop()
-	return nil
+
 }

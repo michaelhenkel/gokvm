@@ -2,11 +2,14 @@ package instance
 
 import (
 	"fmt"
+	"regexp"
+	"time"
 
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/metadata"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/michaelhenkel/gokvm/qemu"
+	"github.com/vbauerster/mpb/v7"
 
 	"libvirt.org/libvirt-go"
 
@@ -110,7 +113,7 @@ func (i *Instance) Delete() error {
 	return nil
 }
 
-func (i *Instance) Create() error {
+func (i *Instance) Create(bar *mpb.Bar) error {
 	distributionImage := i.Image
 	imgPath := fmt.Sprintf("%s/%s", i.Image.LibvirtImagePath, i.Name)
 	i.Image.ImagePath = imgPath
@@ -297,8 +300,43 @@ func (i *Instance) Create() error {
 	if err := ldom.Create(); err != nil {
 		return err
 	}
+	bar.Increment()
+	ipList, err := waitForIPAddress(i.Name, l)
+	if err != nil {
+		return err
+	}
+	bar.Increment()
+	ipAddress := ipList[0]
+	m.IPAddress = &ipAddress
+	if err := ldom.SetMetadata(2, "<ipaddress>"+ipAddress+"</ipaddress>", "ipaddress", "http://ipaddress/ipaddress", 0); err != nil {
+		return err
+	}
 
 	return nil
+}
+
+func waitForIPAddress(domainName string, l *libvirt.Connect) ([]string, error) {
+	domain, err := l.LookupDomainByName(domainName)
+	if err != nil {
+		return nil, err
+	}
+	var ipaddresses []string
+	for {
+		intfList, err := domain.ListAllInterfaceAddresses(0)
+		if err != nil {
+			return nil, err
+		}
+		if len(intfList) > 0 {
+			for _, intf := range intfList {
+				for _, addr := range intf.Addrs {
+					ipaddresses = append(ipaddresses, addr.Addr)
+				}
+			}
+			return ipaddresses, nil
+		} else {
+			time.Sleep(time.Second * 2)
+		}
+	}
 }
 
 func List(cluster string) ([]*Instance, error) {
@@ -354,21 +392,20 @@ func domainToInstance(domain libvirt.Domain, cluster string, role string, suffix
 	if err != nil {
 		return nil, err
 	}
-	intfList, err := domain.ListAllInterfaceAddresses(0)
+	ipaddressWithTag, err := domain.GetMetadata(2, "http://ipaddress/ipaddress", 0)
 	if err != nil {
 		return nil, err
 	}
-	var ipaddresses []string
-	for _, intf := range intfList {
-		for _, addr := range intf.Addrs {
-			ipaddresses = append(ipaddresses, addr.Addr)
-		}
+	re := regexp.MustCompile(`<ipaddress.*?>(.*)</ipaddress>`)
+	var ipaddress string
+	submatchall := re.FindAllStringSubmatch(ipaddressWithTag, -1)
+	for _, element := range submatchall {
+		ipaddress = element[1]
 	}
-
 	return &Instance{
 		Name:        instName,
 		ClusterName: cluster,
-		IPAddresses: ipaddresses,
+		IPAddresses: []string{ipaddress},
 		Role:        Role(role),
 		Suffix:      suffix,
 	}, nil

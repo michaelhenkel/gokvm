@@ -107,9 +107,23 @@ func List() ([]*Network, error) {
 		return nil, err
 	}
 	for _, anet := range activeNetworks {
-		if ok, err := checkMetadata(anet); err != nil {
+		xmlDesc, err := anet.GetXMLDesc(0)
+		if err != nil {
 			return nil, err
-		} else if !ok {
+		}
+		var xmlNetwork libvirtxml.Network
+		if err := xmlNetwork.Unmarshal(xmlDesc); err != nil {
+			return nil, err
+		}
+		if xmlNetwork.Metadata != nil {
+			md, err := metadata.GetMetadata(xmlNetwork.Metadata.XML)
+			if err != nil {
+				return nil, err
+			}
+			if md.Net == nil {
+				continue
+			}
+		} else {
 			continue
 		}
 		netw, err := lnetworkToNetwork(anet)
@@ -123,9 +137,23 @@ func List() ([]*Network, error) {
 		return nil, err
 	}
 	for _, anet := range inActiveNetworks {
-		if ok, err := checkMetadata(anet); err != nil {
+		xmlDesc, err := anet.GetXMLDesc(0)
+		if err != nil {
 			return nil, err
-		} else if !ok {
+		}
+		var xmlNetwork libvirtxml.Network
+		if err := xmlNetwork.Unmarshal(xmlDesc); err != nil {
+			return nil, err
+		}
+		if xmlNetwork.Metadata != nil {
+			md, err := metadata.GetMetadata(xmlNetwork.Metadata.XML)
+			if err != nil {
+				return nil, err
+			}
+			if md.Net == nil {
+				continue
+			}
+		} else {
 			continue
 		}
 		netw, err := lnetworkToNetwork(anet)
@@ -155,9 +183,18 @@ func lnetworkToNetwork(lnetwork libvirt.Network) (*Network, error) {
 	if err := xmlNetwork.Unmarshal(networkXML); err != nil {
 		return nil, err
 	}
+	md, err := metadata.GetMetadata(xmlNetwork.Metadata.XML)
+	if err != nil {
+		return nil, err
+	}
+	var dns string
+	if md.DNS != nil {
+		dns = *md.DNS
+	}
 	netw := &Network{
-		Name:   networkName,
-		Active: isActive,
+		Name:      networkName,
+		Active:    isActive,
+		DNSServer: net.ParseIP(dns),
 	}
 	for _, netwIP := range xmlNetwork.IPs {
 		addr := net.ParseIP(netwIP.Netmask).To4()
@@ -214,9 +251,6 @@ func checkMetadata(lnet libvirt.Network) (bool, error) {
 		if md.Net == nil {
 			return false, nil
 		}
-		if *md.Net != "gokvm" {
-			return false, nil
-		}
 		return true, nil
 	}
 	return false, nil
@@ -232,9 +266,10 @@ func (n *Network) Create() error {
 	if err == nil {
 		return nil
 	}
-
+	dnsserver := n.DNSServer.String()
 	md := metadata.Metadata{
 		Net: &n.Name,
+		DNS: &dnsserver,
 	}
 	mdXML := md.InstanceMetadata()
 	networkCFG := libvirtxml.Network{

@@ -70,7 +70,7 @@ func Build(cluster *cluster.Cluster, inventoryLocation string) error {
 			Vars: map[string]string{
 				"docker_image_repo":          "svl-artifactory.juniper.net/atom-docker-remote",
 				"cluster_name":               fmt.Sprintf("%s.%s", cluster.Name, cluster.Suffix),
-				"artifacts_dir":              "/tmp/cluster1",
+				"artifacts_dir":              "/tmp/" + cluster.Name,
 				"kube_network_plugin":        "cni",
 				"kube_network_plugin_multus": "false",
 				"kubectl_localhost":          "true",

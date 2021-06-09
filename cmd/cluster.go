@@ -13,10 +13,9 @@ import (
 	"github.com/michaelhenkel/gokvm/ks"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/mitchellh/go-homedir"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/tools/clientcmd"
-
-	log "github.com/sirupsen/logrus"
 )
 
 var (
@@ -130,6 +129,7 @@ func createCluster() error {
 			Disk:   disk,
 		},
 	}
+
 	if err := cl.Create(); err != nil {
 		return err
 	}
@@ -149,6 +149,7 @@ func createCluster() error {
 			}
 		}
 	}
+
 	if gitLocation != "" {
 		if err := git.Clone(gitLocation); err != nil {
 			return err
@@ -161,7 +162,7 @@ func createCluster() error {
 		}
 	}
 
-	if err := mergeKubeconfig(cl.Name); err != nil {
+	if err := mergeKubeconfig(cl.Name, cl.Suffix); err != nil {
 		return err
 	}
 
@@ -187,27 +188,34 @@ func deleteCluster() error {
 	return cl.Delete()
 }
 
-func mergeKubeconfig(clusterName string) error {
+func mergeKubeconfig(clusterName string, suffix string) error {
 	kubeConfigPath, err := findKubeConfig()
 	if err != nil {
 		return err
 	}
-	loadingRules := clientcmd.ClientConfigLoadingRules{
-		Precedence: []string{"/tmp/" + clusterName + "/admin.conf", kubeConfigPath},
-	}
-
-	fmt.Println(kubeConfigPath)
 
 	newKubeConfig, err := clientcmd.LoadFromFile("/tmp/" + clusterName + "/admin.conf")
 	if err != nil {
 		return err
 	}
-	mergedConfig, err := loadingRules.Load()
+	existingKubeConfig, err := clientcmd.LoadFromFile(kubeConfigPath)
 	if err != nil {
 		return err
 	}
-	mergedConfig.CurrentContext = newKubeConfig.CurrentContext
-	if err := clientcmd.WriteToFile(*mergedConfig, kubeConfigPath); err != nil {
+
+	for k, v := range newKubeConfig.Clusters {
+		existingKubeConfig.Clusters[k] = v
+	}
+
+	for k, v := range newKubeConfig.Contexts {
+		existingKubeConfig.Contexts[k] = v
+	}
+	for k, v := range newKubeConfig.AuthInfos {
+		existingKubeConfig.AuthInfos[k] = v
+	}
+	newKubeConfig.CurrentContext = existingKubeConfig.CurrentContext
+
+	if err := clientcmd.WriteToFile(*existingKubeConfig, kubeConfigPath); err != nil {
 		return err
 	}
 	return nil
