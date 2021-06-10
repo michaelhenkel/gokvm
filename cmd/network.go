@@ -20,6 +20,9 @@ var (
 
 func init() {
 	cobra.OnInitialize(initNetworkConfig)
+	networkCmd.AddCommand(createNetworkCmd)
+	networkCmd.AddCommand(deleteNetworkCmd)
+	networkCmd.AddCommand(listNetworkCmd)
 	createNetworkCmd.PersistentFlags().StringVarP(&subnet, "subnet", "s", "", "")
 	createNetworkCmd.PersistentFlags().StringVarP(&gateway, "gateway", "g", "", "")
 	createNetworkCmd.PersistentFlags().StringVarP(&dnsServer, "dnsserver", "d", "", "")
@@ -31,10 +34,13 @@ func initNetworkConfig() {
 
 }
 
+var networkCmd = &cobra.Command{
+	Use:   "network",
+	Short: "manages networks",
+	Long:  `All software has versions. This is Hugo's`,
+}
+
 func createNetwork() error {
-	if name == "" {
-		log.Fatal("Name is required")
-	}
 	if err := checkSubnet(subnet); err != nil {
 		log.Fatal(err)
 	}
@@ -92,10 +98,15 @@ func inc(ip net.IP) {
 }
 
 var createNetworkCmd = &cobra.Command{
-	Use:   "network",
+	Use:   "create",
 	Short: "creates a network",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Error("Name is needed")
+		} else {
+			name = args[0]
+		}
 		if err := createNetwork(); err != nil {
 			panic(err)
 		}
@@ -103,10 +114,15 @@ var createNetworkCmd = &cobra.Command{
 }
 
 var deleteNetworkCmd = &cobra.Command{
-	Use:   "network",
+	Use:   "delete",
 	Short: "deletes a network",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Error("Name is needed")
+		} else {
+			name = args[0]
+		}
 		if err := deleteNetwork(); err != nil {
 			panic(err)
 		}
@@ -114,7 +130,7 @@ var deleteNetworkCmd = &cobra.Command{
 }
 
 var listNetworkCmd = &cobra.Command{
-	Use:   "network",
+	Use:   "list",
 	Short: "lists networks",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {

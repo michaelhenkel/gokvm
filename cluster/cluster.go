@@ -10,6 +10,7 @@ import (
 	"github.com/michaelhenkel/gokvm/image"
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/network"
+	"github.com/michaelhenkel/gokvm/snapshot"
 	"github.com/michaelhenkel/gokvm/ssh"
 	"github.com/vbauerster/mpb/v7"
 	"github.com/vbauerster/mpb/v7/decor"
@@ -79,6 +80,49 @@ func (c *Cluster) Delete() error {
 	}
 	for _, inst := range instances {
 		if err := inst.Delete(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Cluster) CreateSnapshot() error {
+	instances, err := instance.List(c.Name)
+	if err != nil {
+		return err
+	}
+	for _, inst := range instances {
+		if err := inst.CreateSnapshot(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Cluster) ListSnapshot() error {
+	instances, err := instance.List(c.Name)
+	if err != nil {
+		return err
+	}
+	snapshotCompleteList := []*snapshot.Snapshot{}
+	for _, inst := range instances {
+		snapshotList, err := inst.ListSnapshot()
+		if err != nil {
+			return err
+		}
+		snapshotCompleteList = append(snapshotCompleteList, snapshotList...)
+	}
+	snapshot.Render(snapshotCompleteList)
+	return nil
+}
+
+func (c *Cluster) RevertSnapshot() error {
+	instances, err := instance.List(c.Name)
+	if err != nil {
+		return err
+	}
+	for _, inst := range instances {
+		if err := inst.RevertSnapshot(); err != nil {
 			return err
 		}
 	}
@@ -180,7 +224,7 @@ func (c *Cluster) Create() error {
 		}
 		wg.Add(1)
 		go c.createInstance(inst, &wg, bar)
-
+		inst.CreateSnapshot()
 	}
 	wg.Wait()
 
@@ -197,6 +241,9 @@ func (c *Cluster) createInstance(inst instance.Instance, wg *sync.WaitGroup, bar
 		return err
 	}
 	bar.Increment()
+	if err := inst.CreateSnapshot(); err != nil {
+		return err
+	}
 	return nil
 
 }

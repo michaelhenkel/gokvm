@@ -29,9 +29,10 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.PersistentFlags().StringVarP(&name, "name", "n", "", "")
 
-	rootCmd.AddCommand(createCmd)
-	rootCmd.AddCommand(deleteCmd)
-	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(clusterCmd)
+	rootCmd.AddCommand(imageCmd)
+	rootCmd.AddCommand(networkCmd)
+	rootCmd.AddCommand(snapshotCmd)
 }
 
 func initConfig() {

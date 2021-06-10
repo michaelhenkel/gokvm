@@ -43,6 +43,14 @@ DNS=` + i.Network.DNSServer.String(),
 			"cat /etc/systemd/resolved.conf > /run/test",
 		},
 	}
+	if i.Image.Distribution == "ubuntu" {
+		s := source{
+			Source: "deb http://apt.kubernetes.io/ kubernetes-xenial main",
+		}
+		ci.APT = map[string]source{
+			"kubernetes": s,
+		}
+	}
 	out, err := ioutil.TempDir("/tmp", "prefix")
 	if err != nil {
 		return nil, err
@@ -147,14 +155,21 @@ DNS=` + i.Network.DNSServer.String(),
 }
 
 type cloudInit struct {
-	Hostname       string       `yaml:"hostname"`
-	ManageEtcHosts bool         `yaml:"manage_etc_hosts"`
-	Users          []user       `yaml:"users"`
-	SSHPwauth      bool         `yaml:"ssh_pwauth"`
-	DisableRoot    bool         `yaml:"disable_root"`
-	Chpasswd       chpasswd     `yaml:"chpasswd"`
-	WriteFiles     []writeFiles `yaml:"write_files"`
-	RunCMD         []string     `yaml:"runcmd"`
+	Hostname       string            `yaml:"hostname"`
+	ManageEtcHosts bool              `yaml:"manage_etc_hosts"`
+	Users          []user            `yaml:"users"`
+	SSHPwauth      bool              `yaml:"ssh_pwauth"`
+	DisableRoot    bool              `yaml:"disable_root"`
+	Chpasswd       chpasswd          `yaml:"chpasswd"`
+	WriteFiles     []writeFiles      `yaml:"write_files"`
+	RunCMD         []string          `yaml:"runcmd"`
+	APT            map[string]source `yaml:"apt"`
+	Snap           map[string]string `yaml:"snap"`
+}
+
+type source struct {
+	Source string `yaml:"source"`
+	KeyID  string `yaml:"keyid"`
 }
 
 type chpasswd struct {

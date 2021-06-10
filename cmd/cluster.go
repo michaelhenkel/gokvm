@@ -35,6 +35,11 @@ var (
 
 func init() {
 	cobra.OnInitialize(initImageConfig)
+	clusterCmd.AddCommand(createClusterCmd)
+	clusterCmd.AddCommand(deleteClusterCmd)
+	clusterCmd.AddCommand(listClusterCmd)
+	clusterCmd.AddCommand(snapshotClusterCmd)
+	clusterCmd.AddCommand(revertClusterCmd)
 	createClusterCmd.PersistentFlags().StringVarP(&img, "image", "i", "default", "")
 	createClusterCmd.PersistentFlags().StringVarP(&nw, "network", "l", "gokvm", "")
 	createClusterCmd.PersistentFlags().StringVarP(&suffix, "suffix", "s", "local", "")
@@ -54,22 +59,76 @@ func initClusterConfig() {
 
 }
 
-var createClusterCmd = &cobra.Command{
+var clusterCmd = &cobra.Command{
 	Use:   "cluster",
+	Short: "manages a cluster",
+	Long:  `All software has versions. This is Hugo's`,
+}
+
+var createClusterCmd = &cobra.Command{
+	Use:   "create",
 	Short: "creates a cluster",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Error("Name is needed")
+		} else {
+			name = args[0]
+		}
 		if err := createCluster(); err != nil {
 			panic(err)
 		}
 	},
 }
 
+var snapshotClusterCmd = &cobra.Command{
+	Use:   "snapshot",
+	Short: "snapshots a cluster",
+	Long:  `All software has versions. This is Hugo's`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Error("Name is needed")
+		} else {
+			name = args[0]
+		}
+		cl := cluster.Cluster{
+			Name: name,
+		}
+		if err := cl.CreateSnapshot(); err != nil {
+			panic(err)
+		}
+	},
+}
+
+var revertClusterCmd = &cobra.Command{
+	Use:   "revert",
+	Short: "reverts a cluster snapshot",
+	Long:  `All software has versions. This is Hugo's`,
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Error("Name is needed")
+		} else {
+			name = args[0]
+		}
+		cl := cluster.Cluster{
+			Name: name,
+		}
+		if err := cl.RevertSnapshot(); err != nil {
+			panic(err)
+		}
+	},
+}
+
 var deleteClusterCmd = &cobra.Command{
-	Use:   "cluster",
+	Use:   "delete",
 	Short: "deletes a cluster",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) == 0 {
+			log.Error("Name is needed")
+		} else {
+			name = args[0]
+		}
 		if err := deleteCluster(); err != nil {
 			panic(err)
 		}
@@ -77,7 +136,7 @@ var deleteClusterCmd = &cobra.Command{
 }
 
 var listClusterCmd = &cobra.Command{
-	Use:   "cluster",
+	Use:   "list",
 	Short: "lists cluster",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -179,9 +238,6 @@ func listCluster() error {
 }
 
 func deleteCluster() error {
-	if name == "" {
-		log.Fatal("Name is required")
-	}
 	cl := cluster.Cluster{
 		Name: name,
 	}

@@ -18,6 +18,9 @@ var (
 
 func init() {
 	cobra.OnInitialize(initImageConfig)
+	imageCmd.AddCommand(createImageCmd)
+	imageCmd.AddCommand(deleteImageCmd)
+	imageCmd.AddCommand(listImageCmd)
 	createImageCmd.PersistentFlags().StringVarP(&url, "url", "u", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&md5url, "md5url", "m", "", "")
 	createImageCmd.PersistentFlags().StringVarP(&path, "path", "p", "", "")
@@ -30,8 +33,14 @@ func initImageConfig() {
 
 }
 
-var createImageCmd = &cobra.Command{
+var imageCmd = &cobra.Command{
 	Use:   "image",
+	Short: "manages images",
+	Long:  `All software has versions. This is Hugo's`,
+}
+
+var createImageCmd = &cobra.Command{
+	Use:   "create",
 	Short: "creates an image",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -42,7 +51,7 @@ var createImageCmd = &cobra.Command{
 }
 
 var deleteImageCmd = &cobra.Command{
-	Use:   "image",
+	Use:   "delete",
 	Short: "deletes an image",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -53,7 +62,7 @@ var deleteImageCmd = &cobra.Command{
 }
 
 var listImageCmd = &cobra.Command{
-	Use:   "image",
+	Use:   "list",
 	Short: "lists images",
 	Long:  `All software has versions. This is Hugo's`,
 	Run: func(cmd *cobra.Command, args []string) {

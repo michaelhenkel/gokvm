@@ -9,6 +9,7 @@ import (
 	"github.com/michaelhenkel/gokvm/metadata"
 	"github.com/michaelhenkel/gokvm/network"
 	"github.com/michaelhenkel/gokvm/qemu"
+	"github.com/michaelhenkel/gokvm/snapshot"
 	"github.com/vbauerster/mpb/v7"
 
 	"libvirt.org/libvirt-go"
@@ -109,6 +110,95 @@ func (i *Instance) Delete() error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+func (i *Instance) CreateSnapshot() error {
+	l, err := qemu.Connnect()
+	if err != nil {
+		return err
+	}
+	domain, err := l.LookupDomainByName(i.Name)
+	if err != nil {
+		return err
+	}
+	domainXML, err := domain.GetXMLDesc(0)
+	if err != nil {
+		return err
+	}
+	xmlDomain := &libvirtxml.Domain{}
+	if err := xmlDomain.Unmarshal(domainXML); err != nil {
+		return err
+	}
+	ds := &libvirtxml.DomainSnapshot{
+		Name:   i.Name,
+		Domain: xmlDomain,
+	}
+	dsXML, err := ds.Marshal()
+	if err != nil {
+		return err
+	}
+	_, err = domain.CreateSnapshotXML(dsXML, 0)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (i *Instance) ListSnapshot() ([]*snapshot.Snapshot, error) {
+	l, err := qemu.Connnect()
+	if err != nil {
+		return nil, err
+	}
+	domain, err := l.LookupDomainByName(i.Name)
+	if err != nil {
+		return nil, err
+	}
+	snapshotList, err := domain.SnapshotListNames(0)
+	if err != nil {
+		return nil, err
+	}
+
+	snapShotList := []*snapshot.Snapshot{}
+	for _, ss := range snapshotList {
+		snap, err := domain.SnapshotLookupByName(ss, 0)
+		if err != nil {
+			return nil, err
+		}
+		snapshotName, err := snap.GetName()
+		if err != nil {
+			return nil, err
+		}
+		isCurrent, err := snap.IsCurrent(0)
+		if err != nil {
+			return nil, err
+		}
+		snapShot := &snapshot.Snapshot{
+			Name:      snapshotName,
+			Instance:  i.Name,
+			IsCurrent: isCurrent,
+		}
+		snapShotList = append(snapShotList, snapShot)
+	}
+	return snapShotList, nil
+}
+
+func (i *Instance) RevertSnapshot() error {
+	l, err := qemu.Connnect()
+	if err != nil {
+		return err
+	}
+	domain, err := l.LookupDomainByName(i.Name)
+	if err != nil {
+		return err
+	}
+	currentSnapshot, err := domain.SnapshotCurrent(0)
+	if err != nil {
+		return err
+	}
+	if err := currentSnapshot.RevertToSnapshot(0); err != nil {
+		return err
 	}
 	return nil
 }
