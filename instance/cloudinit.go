@@ -44,12 +44,16 @@ DNS=` + i.Network.DNSServer.String(),
 		},
 	}
 	if i.Image.Distribution == "ubuntu" {
-		s := source{
-			Source: "deb http://apt.kubernetes.io/ kubernetes-xenial main",
+		netx := netw{
+			Version: "2",
+			Ethernets: map[string]ethernet{
+				"id0": {
+					Match: map[string]string{"name": "enp1*"},
+					Dhcp4: true,
+				},
+			},
 		}
-		ci.APT = map[string]source{
-			"kubernetes": s,
-		}
+		ci.Network = netx
 	}
 	out, err := ioutil.TempDir("/tmp", "prefix")
 	if err != nil {
@@ -165,6 +169,17 @@ type cloudInit struct {
 	RunCMD         []string          `yaml:"runcmd"`
 	APT            map[string]source `yaml:"apt"`
 	Snap           map[string]string `yaml:"snap"`
+	Network        netw              `yaml:"network"`
+}
+
+type netw struct {
+	Version   string              `yaml:"version"`
+	Ethernets map[string]ethernet `yaml:"ethernets"`
+}
+
+type ethernet struct {
+	Match map[string]string `yaml:"match"`
+	Dhcp4 bool              `yaml:"dhcp4"`
 }
 
 type source struct {

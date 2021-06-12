@@ -151,7 +151,7 @@ func listNetwork() error {
 
 func checkSubnet(subnet string) error {
 	if subnet == "" {
-		return errors.New("subnet must be specified")
+		subnet = "192.168.67.0/24"
 	}
 	_, _, err := net.ParseCIDR(subnet)
 	if err != nil {

@@ -99,6 +99,19 @@ func (c *Cluster) CreateSnapshot() error {
 	return nil
 }
 
+func (c *Cluster) DeleteSnapshot() error {
+	instances, err := instance.List(c.Name)
+	if err != nil {
+		return err
+	}
+	for _, inst := range instances {
+		if err := inst.DeleteSnapshot(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Cluster) ListSnapshot() error {
 	instances, err := instance.List(c.Name)
 	if err != nil {
@@ -172,15 +185,12 @@ func (c *Cluster) Create() error {
 		name := fmt.Sprintf("c-instance-%d.%s.%s", i, c.Name, c.Suffix)
 		bar := p.AddBar(int64(total),
 			mpb.PrependDecorators(
-				// simple name decorator
 				decor.Name(name),
 				decor.OnComplete(
-					// spinner decorator with default style
 					decor.Spinner(nil, decor.WCSyncSpace), "done",
 				),
 			),
 			mpb.AppendDecorators(
-				// decor.DSyncWidth bit enables column width synchronization
 				decor.Percentage(decor.WCSyncWidth),
 			),
 		)
@@ -234,6 +244,7 @@ func (c *Cluster) Create() error {
 func (c *Cluster) createInstance(inst instance.Instance, wg *sync.WaitGroup, bar *mpb.Bar) error {
 	defer wg.Done()
 	if err := inst.Create(bar); err != nil {
+		fmt.Println("error", err)
 		return err
 	}
 	bar.Increment()

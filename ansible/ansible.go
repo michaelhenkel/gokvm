@@ -58,7 +58,7 @@ func Run(inventory string, playbookLocation string, clusterName string) error {
 			decor.Name("deploying kubespray"),
 			decor.OnComplete(
 				// spinner decorator with default style
-				decor.Spinner(nil, decor.WCSyncSpace), "done",
+				decor.Spinner(nil, decor.WCSyncSpace), "",
 			),
 		),
 		mpb.AppendDecorators(

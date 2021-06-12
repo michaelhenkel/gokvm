@@ -3,6 +3,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 
 	"code.cloudfoundry.org/bytefmt"
 	"github.com/michaelhenkel/gokvm/ansible"
@@ -12,6 +14,7 @@ import (
 	"github.com/michaelhenkel/gokvm/instance"
 	"github.com/michaelhenkel/gokvm/ks"
 	"github.com/michaelhenkel/gokvm/network"
+	"github.com/michaelhenkel/gokvm/remote"
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -31,6 +34,7 @@ var (
 	k8sinventory string
 	gitLocation  string
 	runAnsible   bool
+	runCommand   bool
 )
 
 func init() {
@@ -53,6 +57,7 @@ func init() {
 	createClusterCmd.PersistentFlags().StringVarP(&k8sinventory, "inventory", "y", "", "")
 	createClusterCmd.PersistentFlags().StringVarP(&gitLocation, "gitlocation", "g", "", "")
 	createClusterCmd.PersistentFlags().BoolVarP(&runAnsible, "run", "r", false, "")
+	createClusterCmd.PersistentFlags().BoolVarP(&runCommand, "exec", "x", false, "")
 }
 
 func initClusterConfig() {
@@ -150,6 +155,15 @@ func createCluster() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
+	if nw == "" {
+		networks, err := network.List()
+		if err != nil {
+			return err
+		}
+		if len(networks) > 0 {
+			nw = networks[0].Name
+		}
+	}
 	if pubKeyPath == "" {
 		dirname, err := os.UserHomeDir()
 		if err != nil {
@@ -219,13 +233,104 @@ func createCluster() error {
 		if err := ansible.Run(k8sinventory, gitLocation+"/cluster.yml", cl.Name); err != nil {
 			return err
 		}
+		if err := mergeKubeconfig(cl.Name, cl.Suffix); err != nil {
+			return err
+		}
 	}
 
-	if err := mergeKubeconfig(cl.Name, cl.Suffix); err != nil {
-		return err
+	if runCommand {
+		for idx, newCL := range clusterList {
+			if newCL.Name == cl.Name {
+				var wg sync.WaitGroup
+				for _, inst := range newCL.Instances {
+					wg.Add(1)
+					go func(inst *instance.Instance) {
+						hosts := buildHosts(newCL.Instances)
+						conn, err := remote.Connect(inst.IPAddresses[0]+":22", "root")
+						if err != nil {
+							log.Info(err)
+						}
+						cmds := remote.GetUbuntuCMDS()
+						cmds = append(cmds, hosts...)
+						if inst.Role == instance.Controller {
+							cmds = append(cmds, remote.KubeadmImagePull()...)
+						}
+						_, err = conn.SendCommands(inst.Image.Distribution, cmds, &wg)
+						if err != nil {
+							log.Info(err)
+						}
+					}(inst)
+				}
+				wg.Wait()
+				var joinCmd string
+				for _, inst := range newCL.Instances {
+					if inst.Role == instance.Controller {
+						conn, err := remote.Connect(inst.IPAddresses[0]+":22", "root")
+						if err != nil {
+							log.Info(err)
+						}
+						podCidr := fmt.Sprintf("10.244.%d.0/24", idx)
+						serviceCidr := fmt.Sprintf("10.96.%d.0/24", idx)
+						_, err = conn.SendCommands(inst.Image.Distribution, remote.KubeadmInit(podCidr, serviceCidr, inst.IPAddresses[0]), nil)
+						if err != nil {
+							log.Info(err)
+						}
+						joinCmdByte, err := conn.SendCommands(inst.Image.Distribution, []string{"kubeadm token create --print-join-command"}, nil)
+						if err != nil {
+							log.Info(err)
+						}
+						joinCmd = string(joinCmdByte)
+						kubeConfigByte, err := conn.SendCommands(inst.Image.Distribution, []string{"cat /etc/kubernetes/admin.conf"}, nil)
+						if err != nil {
+							log.Info(err)
+						}
+						if _, err := os.Stat(fmt.Sprintf("/tmp/%s", inst.ClusterName)); os.IsNotExist(err) {
+							if err := os.Mkdir(fmt.Sprintf("/tmp/%s", inst.ClusterName), 0700); err != nil {
+								log.Info(err)
+							}
+						}
+						if err := os.WriteFile(fmt.Sprintf("/tmp/%s/admin.conf", inst.ClusterName), kubeConfigByte, 0600); err != nil {
+							log.Info(err)
+						}
+						break
+					}
+				}
+				wg.Wait()
+				for _, inst := range newCL.Instances {
+					if inst.Role == instance.Worker {
+						fmt.Println("adding worker")
+						wg.Add(1)
+						go func(inst *instance.Instance) {
+							conn, err := remote.Connect(inst.IPAddresses[0]+":22", "root")
+							if err != nil {
+								log.Info(err)
+							}
+							joinCmd = strings.TrimRight(joinCmd, "\r\n")
+							_, err = conn.SendCommands(inst.Image.Distribution, []string{joinCmd}, &wg)
+							if err != nil {
+								log.Info("ERROR", err)
+							}
+						}(inst)
+					}
+				}
+				wg.Wait()
+			}
+		}
+		if err := mergeKubeconfig(cl.Name, cl.Suffix); err != nil {
+			return err
+		}
 	}
-
 	return nil
+}
+
+func buildHosts(instanceList []*instance.Instance) []string {
+	var hostsCmd []string
+	for _, inst := range instanceList {
+		nameList := strings.Split(inst.Name, ".")
+		hostsLine := fmt.Sprintf("echo %s %s %s >> /etc/hosts", inst.IPAddresses[0], inst.Name, nameList[0])
+		hostsCmd = append(hostsCmd, hostsLine)
+	}
+	return hostsCmd
 }
 
 func listCluster() error {

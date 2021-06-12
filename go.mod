@@ -11,6 +11,7 @@ require (
 	github.com/docker/spdystream v0.0.0-20160310174837-449fdfce4d96 // indirect
 	github.com/fatih/color v1.12.0 // indirect
 	github.com/go-git/go-git/v5 v5.4.2 // indirect
+	github.com/go-ini/ini v1.62.0 // indirect
 	github.com/google/uuid v1.2.0
 	github.com/gophercloud/gophercloud v0.0.0-20190126172459-c818fa66e4c8 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.2.2

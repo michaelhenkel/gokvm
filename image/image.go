@@ -192,6 +192,14 @@ func (i *Image) Delete() error {
 	if err != nil {
 		return nil
 	}
+	poolXML, err := pool.GetXMLDesc(0)
+	if err != nil {
+		return err
+	}
+	xmlPool := libvirtxml.StoragePool{}
+	if err := xmlPool.Unmarshal(poolXML); err != nil {
+		return err
+	}
 	if len(vols) == 0 {
 		if err := pool.Destroy(); err != nil {
 			return err
@@ -199,6 +207,10 @@ func (i *Image) Delete() error {
 		if err := pool.Undefine(); err != nil {
 			return err
 		}
+		if err := os.RemoveAll(xmlPool.Target.Path); err != nil {
+			return err
+		}
+
 	}
 	return nil
 }
