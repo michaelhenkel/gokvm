@@ -18,7 +18,8 @@ import (
 
 func retrySshDial(attempts int, sleep time.Duration, f func(string, string, *ssh.ClientConfig) (*ssh.Client, error), network string, addr string, config *ssh.ClientConfig) error {
 	if _, err := f(network, addr, config); err != nil {
-		if err.Error() != "ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain" {
+		if err.Error() != "ssh: handshake failed: ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain" ||
+			err.Error() != fmt.Sprintf("dial tcp %s:22: connect: connection refused", addr) {
 			if s, ok := err.(stop); ok {
 				return s.error
 			}

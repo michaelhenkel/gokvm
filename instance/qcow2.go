@@ -7,6 +7,8 @@ import (
 	"os/exec"
 
 	"github.com/michaelhenkel/gokvm/image"
+
+	log "github.com/sirupsen/logrus"
 	//qcow2 "github.com/zchee/go-qcow2"
 )
 
@@ -23,6 +25,7 @@ func (i *Instance) createInstanceImage(backingImage image.Image) (*image.Image, 
 	i.Image.ImageType = image.INSTANCE
 	found, err := i.Image.Get()
 	if err != nil {
+		log.Error("cannot get image", err)
 		return nil, err
 	}
 	if found {
@@ -31,13 +34,18 @@ func (i *Instance) createInstanceImage(backingImage image.Image) (*image.Image, 
 
 	out, err := ioutil.TempDir("/tmp", "prefix")
 	if err != nil {
+		log.Error("cannot create temp dir", err)
 		return nil, err
 	}
 	defer os.RemoveAll(out)
+	backingImgPath := fmt.Sprintf("%s/distribution/%s/%s", i.Image.LibvirtImagePath, backingImage.Distribution, backingImage.Name)
+	imgOut := fmt.Sprintf("%s/%s", out, i.Name)
+	cmdLine := []string{"create", "-b", backingImgPath, "-f", "qcow2", "-F", "qcow2", imgOut, i.Resources.Disk}
 
-	cmd := exec.Command("qemu-img", "create", "-b", i.Image.LibvirtImagePath+"/"+backingImage.Distribution+"/"+backingImage.Name, "-f", "qcow2", "-F", "qcow2", fmt.Sprintf("%s/%s", out, i.Name), i.Resources.Disk)
+	cmd := exec.Command("qemu-img", cmdLine...)
 	_, err = cmd.Output()
 	if err != nil {
+		log.Error("cannot create cloud init img", err)
 		return nil, err
 	}
 
@@ -48,6 +56,7 @@ func (i *Instance) createInstanceImage(backingImage image.Image) (*image.Image, 
 	i.Image.ImageLocation = fmt.Sprintf("%s/%s", out, i.Name)
 	i.Image.ImageType = image.INSTANCE
 	if err := i.Image.Create(); err != nil {
+		log.Error("cannot create image volume", err)
 		return nil, err
 	}
 

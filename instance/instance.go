@@ -248,6 +248,7 @@ func (i *Instance) Create(bar *mpb.Bar) error {
 	distributionImage := i.Image
 	imgPath := fmt.Sprintf("%s/%s", i.Image.LibvirtImagePath, i.Name)
 	i.Image.ImagePath = imgPath
+	fmt.Println("0")
 	cloudInitImg, err := i.createCloudInit()
 	if err != nil {
 		return err
@@ -257,6 +258,7 @@ func (i *Instance) Create(bar *mpb.Bar) error {
 	i.Image.ImagePath = imgPath
 	img, err := i.createInstanceImage(distributionImage)
 	if err != nil {
+		fmt.Println("err", err)
 		return err
 	}
 	found, err := i.Image.Get()
@@ -292,12 +294,15 @@ func (i *Instance) Create(bar *mpb.Bar) error {
 			machineType = "pc-q35-focal"
 			slot = 0
 		}
+	case "fedora":
+		machineType = "pc-q35-5.1"
+		slot = 0
 	}
+
 	dd, err := defaultDomain(osReleaseMap["ID"])
 	if err != nil {
 		return err
 	}
-
 	dd.Name = i.Name
 	dd.Metadata = &libvirtxml.DomainMetadata{
 		XML: domainMetadata,
@@ -425,6 +430,7 @@ func (i *Instance) Create(bar *mpb.Bar) error {
 	if err != nil {
 		return err
 	}
+	//fmt.Println(domainXML)
 	l, err := qemu.Connnect()
 	if err != nil {
 		return err
@@ -573,6 +579,8 @@ func defaultDomain(distro string) (*libvirtxml.Domain, error) {
 	libvirtDomain := &libvirtxml.Domain{}
 	switch distro {
 	case "centos":
+		domainModel = domainModelCentos
+	case "fedora":
 		domainModel = domainModelCentos
 	case "ubuntu":
 		domainModel = domainModelUbuntu
