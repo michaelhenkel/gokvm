@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -58,8 +59,6 @@ func dial(server string, config *ssh.ClientConfig, wg *sync.WaitGroup) {
 	wg.Done()
 }
 
-var knownHostEntry string
-
 func out(wg *sync.WaitGroup) {
 	for s := range Ch {
 		for k, v := range s {
@@ -69,14 +68,22 @@ func out(wg *sync.WaitGroup) {
 				wg.Done()
 			}
 			khFilePath := filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts")
-			f, err := os.OpenFile(khFilePath, os.O_APPEND|os.O_WRONLY, 0600)
+			fileByte, err := os.ReadFile(khFilePath)
 			if err != nil {
 				log.Error(err)
 				wg.Done()
 			}
-			defer f.Close()
-			knownHosts := knownhosts.Normalize(k)
-			_, err = f.WriteString(knownhosts.Line([]string{knownHosts}, publicKey) + "\n")
+
+			compileString := fmt.Sprintf(`(%s) (.+)`, k)
+			r, _ := regexp.Compile(compileString)
+			l := r.ReplaceAll(fileByte, nil)
+			knownHostLineByte := []byte(knownhosts.Line([]string{knownhosts.Normalize(k)}, publicKey) + "\n")
+			l = append(l, knownHostLineByte...)
+
+			if err := os.WriteFile(khFilePath, l, 0600); err != nil {
+				log.Error(err)
+				wg.Done()
+			}
 			wg.Done()
 		}
 

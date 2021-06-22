@@ -16,6 +16,7 @@ import (
 
 	"libvirt.org/libvirt-go"
 
+	log "github.com/sirupsen/logrus"
 	libvirtxml "libvirt.org/libvirt-go-xml"
 )
 
@@ -79,6 +80,29 @@ func (i *Instance) Delete() error {
 		if err != nil {
 			return err
 		}
+
+		domainXMLString, err := domain.GetXMLDesc(0)
+		if err != nil {
+			return err
+		}
+		domainXML := &libvirtxml.Domain{}
+		if err := domainXML.Unmarshal(domainXMLString); err != nil {
+			return err
+		}
+		md, err := metadata.GetMetadata(domainXML.Metadata.XML)
+		if err != nil {
+			return err
+		}
+
+		if md.MACAddress != nil && md.IPAddress != nil && md.Net != nil {
+			i.Network.Name = *md.Net
+			if err := i.Network.DelDHCPHost(*md.MACAddress, *md.IPAddress); err != nil {
+				return err
+			}
+		} else {
+			fmt.Println("mac ip not found", domainXML.Metadata.XML)
+		}
+
 		domainActive, err := domain.IsActive()
 		if err != nil {
 			return err
@@ -88,6 +112,7 @@ func (i *Instance) Delete() error {
 				return err
 			}
 		}
+
 		if err := domain.Undefine(); err != nil {
 			return err
 		}
@@ -271,6 +296,7 @@ func (i *Instance) Create(bar *mpb.Bar) error {
 		Cluster: &i.ClusterName,
 		Suffix:  &i.Suffix,
 		Role:    &role,
+		Net:     &i.Network.Name,
 	}
 	domainMetadata := m.InstanceMetadata()
 	var machineType string
@@ -462,21 +488,29 @@ func (i *Instance) Create(bar *mpb.Bar) error {
 		return err
 	}
 	bar.Increment()
-	ipAddress := ipList[0]
-	m.IPAddress = &ipAddress
-	if err := ldom.SetMetadata(2, "<ipaddress>"+ipAddress+"</ipaddress>", "ipaddress", "http://ipaddress/ipaddress", 0); err != nil {
-		return err
+	for ip, mac := range ipList {
+		m.IPAddress = &ip
+		if err := ldom.SetMetadata(2, "<ipaddress>"+ip+"</ipaddress>", "ipaddress", "http://ipaddress/ipaddress", 0); err != nil {
+			return err
+		}
+		if err := ldom.SetMetadata(2, "<macaddress>"+mac+"</macaddress>", "macaddress", "http://macaddress/macaddress", 0); err != nil {
+			return err
+		}
+		if err := i.Network.AddDHCPHost(mac, ip); err != nil {
+			log.Error(err)
+			return err
+		}
 	}
 
 	return nil
 }
 
-func waitForIPAddress(domainName string, l *libvirt.Connect) ([]string, error) {
+func waitForIPAddress(domainName string, l *libvirt.Connect) (map[string]string, error) {
 	domain, err := l.LookupDomainByName(domainName)
 	if err != nil {
 		return nil, err
 	}
-	var ipaddresses []string
+	var ipMacMap = make(map[string]string)
 	for {
 		intfList, err := domain.ListAllInterfaceAddresses(0)
 		if err != nil {
@@ -485,10 +519,10 @@ func waitForIPAddress(domainName string, l *libvirt.Connect) ([]string, error) {
 		if len(intfList) > 0 {
 			for _, intf := range intfList {
 				for _, addr := range intf.Addrs {
-					ipaddresses = append(ipaddresses, addr.Addr)
+					ipMacMap[addr.Addr] = intf.Hwaddr
 				}
 			}
-			return ipaddresses, nil
+			return ipMacMap, nil
 		} else {
 			time.Sleep(time.Second * 2)
 		}

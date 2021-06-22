@@ -27,8 +27,6 @@ func Execute() error {
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	rootCmd.PersistentFlags().StringVarP(&name, "name", "n", "", "")
-
 	rootCmd.AddCommand(clusterCmd)
 	rootCmd.AddCommand(imageCmd)
 	rootCmd.AddCommand(networkCmd)

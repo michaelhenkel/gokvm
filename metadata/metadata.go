@@ -6,15 +6,16 @@ import (
 )
 
 type Metadata struct {
-	XMLName   xml.Name `xml:"metadata"`
-	Net       *string  `xml:"net"`
-	Image     *string  `xml:"image"`
-	Cluster   *string  `xml:"cluster"`
-	Subnet    *string  `xml:"subnet"`
-	Role      *string  `xml:"role"`
-	Suffix    *string  `xml:"suffix"`
-	DNS       *string  `xml:"dns"`
-	IPAddress *string  `xml:"ipaddress"`
+	XMLName    xml.Name `xml:"metadata"`
+	Net        *string  `xml:"net"`
+	Image      *string  `xml:"image"`
+	Cluster    *string  `xml:"cluster"`
+	Subnet     *string  `xml:"subnet"`
+	Role       *string  `xml:"role"`
+	Suffix     *string  `xml:"suffix"`
+	DNS        *string  `xml:"dns"`
+	IPAddress  *string  `xml:"ipaddress"`
+	MACAddress *string  `xml:"macaddress"`
 }
 
 func GetMetadata(metadata string) (*Metadata, error) {
@@ -55,6 +56,9 @@ func (m *Metadata) InstanceMetadata() string {
 	}
 	if m.IPAddress != nil {
 		metadataString = metadataString + getXMLLine(m.IPAddress, "ipaddress")
+	}
+	if m.MACAddress != nil {
+		metadataString = metadataString + getXMLLine(m.MACAddress, "macaddress")
 	}
 	return metadataString
 }

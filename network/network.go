@@ -10,6 +10,7 @@ import (
 	"github.com/michaelhenkel/gokvm/qemu"
 	"gopkg.in/yaml.v3"
 
+	log "github.com/sirupsen/logrus"
 	libvirt "libvirt.org/libvirt-go"
 	libvirtxml "libvirt.org/libvirt-go-xml"
 )
@@ -47,6 +48,98 @@ type Network struct {
 	networkCFG libvirtxml.Network
 	Active     bool
 	Bridge     string
+}
+
+func (n *Network) DelDHCPHost(mac, ipaddress string) error {
+	l, err := qemu.Connnect()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	networkCFG, err := l.LookupNetworkByName(n.Name)
+	if err != nil {
+		lerr, ok := err.(libvirt.Error)
+		if !ok {
+			log.Error("failed to read network", lerr)
+			return lerr
+		}
+		if lerr.Code == libvirt.ERR_NO_NETWORK {
+			log.Error("cannot find network", n.Name)
+			return nil
+		}
+		log.Error(err)
+		return err
+	}
+
+	host := libvirtxml.NetworkDHCPHost{
+		MAC: mac,
+		IP:  ipaddress,
+		Lease: &libvirtxml.NetworkDHCPLease{
+			Expiry: 0,
+			Unit:   "seconds",
+		},
+	}
+
+	hostXML, err := host.Marshal()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	if err := networkCFG.Update(2, 4, 0, hostXML, 0); err != nil {
+		return err
+	}
+	if err := networkCFG.Update(2, 4, 0, hostXML, 2); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (n *Network) AddDHCPHost(mac, ipaddress string) error {
+	l, err := qemu.Connnect()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	networkCFG, err := l.LookupNetworkByName(n.Name)
+	if err != nil {
+		lerr, ok := err.(libvirt.Error)
+		if !ok {
+			log.Error("failed to read network", lerr)
+			return lerr
+		}
+		if lerr.Code == libvirt.ERR_NO_NETWORK {
+			log.Error("cannot find network")
+			return nil
+		}
+		log.Error(err)
+		return err
+	}
+
+	host := libvirtxml.NetworkDHCPHost{
+		MAC: mac,
+		IP:  ipaddress,
+		Lease: &libvirtxml.NetworkDHCPLease{
+			Expiry: 0,
+			Unit:   "seconds",
+		},
+	}
+
+	hostXML, err := host.Marshal()
+	if err != nil {
+		log.Error(err)
+		return err
+	}
+
+	if err := networkCFG.Update(3, 4, 0, hostXML, 0); err != nil {
+		return err
+	}
+	if err := networkCFG.Update(3, 4, 0, hostXML, 2); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (n *Network) Delete() error {

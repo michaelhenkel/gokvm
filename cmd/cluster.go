@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -35,6 +36,8 @@ var (
 	gitLocation  string
 	runAnsible   bool
 	runCommand   bool
+	count        int
+	startIndex   int
 )
 
 func init() {
@@ -49,6 +52,8 @@ func init() {
 	createClusterCmd.PersistentFlags().StringVarP(&suffix, "suffix", "s", "local", "")
 	createClusterCmd.PersistentFlags().IntVarP(&worker, "worker", "w", 0, "")
 	createClusterCmd.PersistentFlags().IntVarP(&controller, "controller", "c", 1, "")
+	createClusterCmd.PersistentFlags().IntVarP(&count, "number", "n", 1, "")
+	createClusterCmd.PersistentFlags().IntVarP(&startIndex, "index", "z", 0, "")
 	createClusterCmd.PersistentFlags().StringVarP(&memory, "memory", "m", "12G", "")
 	createClusterCmd.PersistentFlags().IntVarP(&cpu, "cpu", "v", 4, "")
 	createClusterCmd.PersistentFlags().StringVarP(&disk, "disk", "d", "10G", "")
@@ -80,7 +85,7 @@ var createClusterCmd = &cobra.Command{
 		} else {
 			name = args[0]
 		}
-		if err := createCluster(); err != nil {
+		if err := setupCluster(); err != nil {
 			panic(err)
 		}
 	},
@@ -151,7 +156,7 @@ var listClusterCmd = &cobra.Command{
 	},
 }
 
-func createCluster() error {
+func setupCluster() error {
 	if name == "" {
 		log.Fatal("Name is required")
 	}
@@ -180,9 +185,19 @@ func createCluster() error {
 	if err != nil {
 		return err
 	}
+	var wg sync.WaitGroup
+	for i := startIndex; i < count+startIndex; i++ {
+		wg.Add(1)
+		go createCluster(f, memBytes, &wg, i)
+	}
+	wg.Wait()
+	return nil
+}
 
+func createCluster(f []byte, memBytes uint64, wg *sync.WaitGroup, idx int) error {
+	defer wg.Done()
 	cl := cluster.Cluster{
-		Name: name,
+		Name: name + strconv.Itoa(idx),
 		Network: network.Network{
 			Name: nw,
 		},
@@ -214,7 +229,12 @@ func createCluster() error {
 	if k8sinventory != "" {
 		for _, newCL := range clusterList {
 			if newCL.Name == cl.Name {
-				if err := ks.Build(newCL, k8sinventory); err != nil {
+				if err := os.MkdirAll(k8sinventory+"/"+cl.Name, 0777); err != nil {
+					if !os.IsExist(err) {
+						return err
+					}
+				}
+				if err := ks.Build(newCL, k8sinventory+"/"+cl.Name+"/contrail.yaml"); err != nil {
 					return err
 				}
 				break
@@ -230,7 +250,7 @@ func createCluster() error {
 	}
 
 	if runAnsible {
-		if err := ansible.Run(k8sinventory, gitLocation+"/cluster.yml", cl.Name); err != nil {
+		if err := ansible.Run(k8sinventory+"/"+cl.Name+"/contrail.yaml", gitLocation+"/cluster.yml", cl.Name); err != nil {
 			return err
 		}
 		if err := mergeKubeconfig(cl.Name, cl.Suffix); err != nil {
